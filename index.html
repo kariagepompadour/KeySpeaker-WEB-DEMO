@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101114">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<title>KeySpeaker WEB DEMO</title>
+<meta name="description" content="KeySpeaker for Cardputer ADV, in the browser: terrain from the sound your computer plays, with a fighter flying over it. / Cardputer ADV 版 KeySpeaker をブラウザで再現。">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="page">
+  <div class="top"><h1>KeySpeaker <small>WEB DEMO</small></h1><div class="langs"><button data-setlang="en">English</button><button data-setlang="ja">日本語</button></div></div>
+  <p class="lead"><span lang="en">Terrain grows from the sound your computer is playing, and a fighter flies over it. The Cardputer ADV screen (240×135), reproduced as it is.</span><span lang="ja">パソコンで鳴っている音に反応して地形ができ、宇宙船が進みます。Cardputer ADV の画面(240×135)をそのまま再現しています。</span></p>
+  <p class="lead fnnote"><span class="hl"><span lang="en">The device's Fn is Shift on a computer. (Fn+M = Shift+M)</span><span lang="ja">実機の Fn はパソコンでは Shift に当たります。(Fn+M = Shift+M)</span></span></p>
+
+  <div class="quick" aria-label="Quick controls">
+    <button class="power" id="bShare" aria-pressed="false"><span></span><b id="shareLabel">START</b></button>
+    <button class="btn" data-code="KeyM" data-fn="1"><b class="kk">Fn+M</b> <span lang="en">Next mode</span><span lang="ja">次のモード</span></button>
+    <button class="btn" data-code="KeyH"><b class="kk">h</b> <span lang="en">Help</span><span lang="ja">ヘルプ</span></button>
+    <button class="btn" id="bFull">⛶ <span lang="en">Full screen</span><span lang="ja">全画面</span></button>
+    <div id="msg"></div>
+  </div>
+
+  <section class="device" id="device" aria-label="KeySpeaker screen">
+    <div class="bezel"><canvas id="lcd" width="240" height="135" aria-label="Cardputer screen"></canvas></div>
+    <div class="brand"><span>KeySpeaker</span><span>Cardputer ADV</span></div>
+  </section>
+
+  <section class="control-panel notice" aria-label="Notes">
+    <h2>NOTE</h2>
+    <ul class="notes">
+      <li><span lang="en">This is a screen demo of the device. <b>BLE is never shown</b>: the screen always says USB.</span><span lang="ja">実機の画面を再現したデモです。<b>BLE は表示されません</b>(接続表示は常に USB です)。</span></li>
+      <li><span lang="en">Even if a real Cardputer is connected to this computer, <b>its key presses are not picked up</b> by this page. Only this computer's keyboard (or the on-screen buttons) works here.</span><span lang="ja">実機をこのパソコンにつないでいても、<b>実機のキー操作はこのページには反映されません</b>。ここで使えるのは、このパソコンのキーボード(または画面のボタン)だけです。</span></li>
+    </ul>
+  </section>
+
+  <section class="control-panel" aria-label="Audio source">
+    <h2>AUDIO</h2>
+    <p><span lang="en">Captures the sound this computer is playing. Press <b>START</b>, pick the <b>tab</b> (or screen) that makes the sound in the sharing dialog, and tick <b>Share audio</b>.</span><span lang="ja">このパソコンで再生中の音を取り込みます。<b>START</b> を押し、共有ダイアログで音を出している<b>タブ</b>(または画面)を選び、<b>「音声を共有」</b>にチェックしてください。</span></p>
+    <ul class="notes">
+      <li><span lang="en">Chrome / Edge: on Windows, "Entire screen" captures the whole system's sound; on Mac / Linux, share a "Tab".</span><span lang="ja">Chrome / Edge: Windows は「画面全体」で PC 全体の音、Mac / Linux は「タブ」の音を取り込めます。</span></li>
+      <li><span lang="en">The video is discarded. The sound is only analysed to drive the screen: it is not played again or sent anywhere (the source keeps playing as before).</span><span lang="ja">映像は使わず捨てます。音は画面に反応するためだけに解析し、再生も送信もしません(取り込み元の音はそのまま鳴ります)。</span></li>
+      <li><span lang="en">Phone browsers cannot capture audio.</span><span lang="ja">スマホのブラウザは音の取り込みに対応していません。</span></li>
+      <li><span lang="en">START and Full screen are buttons for this web version only, not device keys.</span><span lang="ja">START と全画面はWEB版だけのボタンです。実機のキーではありません。</span></li>
+    </ul>
+  </section>
+
+  <section class="control-panel keys" aria-label="Key guide">
+    <h2>KEY GUIDE</h2>
+    <p><span lang="en">The device's own key assignments. On a computer press the key; on a phone tap the button. <span class="hl">The device's Fn is Shift on a computer.</span></span><span lang="ja">実機のキー割り当てそのままです。パソコンではキーを押す、スマホでは下のボタンをタップします。<span class="hl">実機の Fn はパソコンでは Shift に当たります。</span></span></p>
+    <div class="group"><span lang="en">Measure and flight modes</span><span lang="ja">計測モード・飛行モード</span></div>
+    <div class="key-grid">
+      <div><button data-code="BracketLeft">[</button><span><span lang="en">Volume −</span><span lang="ja">音量 −</span></span></div>
+      <div><button data-code="BracketRight">]</button><span><span lang="en">Volume +</span><span lang="ja">音量 +</span></span></div>
+      <div><button data-code="Backslash">\</button><span><span lang="en">Mute</span><span lang="ja">ミュート</span></span></div>
+      <div><button data-code="Space">space</button><span><span lang="en">Play / pause</span><span lang="ja">再生 / 一時停止</span></span></div>
+      <div><button data-code="Comma">,</button><span><span lang="en">Previous track</span><span lang="ja">前の曲</span></span></div>
+      <div><button data-code="Slash">/</button><span><span lang="en">Next track</span><span lang="ja">次の曲</span></span></div>
+      <div><button data-code="Minus">-</button><span><span lang="en">Boost −</span><span lang="ja">ブースト −</span></span></div>
+      <div><button data-code="Equal">=</button><span><span lang="en">Boost +</span><span lang="ja">ブースト +</span></span></div>
+      <div><button data-code="KeyB">b</button><span><span lang="en">Bass cut</span><span lang="ja">低音カット</span></span></div>
+      <div><button data-code="KeyR">r</button><span><span lang="en">Reset the counters</span><span lang="ja">カウンタをリセット</span></span></div>
+      <div><button data-code="KeyV">v</button><span><span lang="en">Measure ⇄ flight</span><span lang="ja">計測 ⇄ 飛行</span></span></div>
+      <div><button data-code="KeyH">h</button><span><span lang="en">Help screen on / off</span><span lang="ja">ヘルプ画面 開く / 閉じる</span></span></div>
+      <div><button data-code="Period">.</button><span><span lang="en">Keys with no job (such as .) also open help</span><span lang="ja">役のないキー(. など)もヘルプ</span></span></div>
+    </div>
+    <div class="group"><span lang="en">On every screen</span><span lang="ja">どの画面でも</span></div>
+    <div class="key-grid">
+      <div><button data-code="KeyM" data-fn="1">Fn+M</button><span><span lang="en">Next mode (measure → flight → keyboard)</span><span lang="ja">画面切替(計測 → 飛行 → キーボード)</span></span></div>
+      <div><button data-code="KeyO" data-fn="1">Fn+O</button><span>Mac / Win</span></div>
+      <div><button data-code="KeyA" data-fn="1">Fn+A</button><span><span lang="en">AUX on / off</span><span lang="ja">AUX オン / オフ</span></span></div>
+    </div>
+    <div class="group"><span lang="en">Keyboard (text input) mode</span><span lang="ja">キーボードモード(文字入力)</span></div>
+    <div class="key-grid">
+      <div><button data-code="BracketLeft" data-fn="1">Fn+[</button><span><span lang="en">Input: A (English)</span><span lang="ja">入力を A(英数)に</span></span></div>
+      <div><button data-code="BracketRight" data-fn="1">Fn+]</button><span><span lang="en">Input: あ (kana)</span><span lang="ja">入力を あ(かな)に</span></span></div>
+      <div><button data-hold="g0">G0 <small><span lang="en">hold</span><span lang="ja">長押し</span></small></button><span><span lang="en">MOUSE screen while held (the device's G0 button)</span><span lang="ja">押している間 MOUSE 画面(実機はG0ボタン)</span></span></div>
+    </div>
+    <p class="foot"><span lang="en">After the opening screen, the screen you used last comes up, as on the device (remembered in this browser; flight mode the first time).<br>In measure mode, a minute with no key and no sound brings back the resting emblem (any key wakes it). The equalizer swaps in by itself every minute and between songs.<br>Volume, mute, boost and bass cut change only what the screen shows, not the PC's volume or sound. In keyboard mode the arrows, Esc, F1–F12, Delete and copy/paste go to the computer on the device; this web version does not send them.</span><span lang="ja">オープニング画面のあとは、実機と同じく前回使っていた画面が表示されます(このブラウザに記憶。初回は飛行モード)。<br>計測モードで 1 分間、キーも音もないと待機中のエンブレムに戻ります(どれかキーで復帰)。EQ は 1 分ごと・曲の切れ目で自動的に入れ替わります。<br>音量・ミュート・ブースト・低音カットは画面の表示だけが変わります(PC の音量や音は変わりません)。キーボードモードの矢印・Esc・F1〜F12・Delete・コピー&ペーストは、実機ではPCへ送られます(このWEB版では送信しません)。</span></p>
+  </section>
+</main>
+<script src="splash-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

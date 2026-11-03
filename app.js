@@ -1,0 +1,989 @@
+"use strict";
+/* ================= 240x135 frame buffer and the Cardputer's 6x8 font ================= */
+const W = 240, H = 135;
+const fb = new Uint32Array(W * H);
+const rgb = (r, g, b) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+const BLACK = rgb(0, 0, 0);
+const COL_BG = BLACK, COL_FG = rgb(255, 255, 255), COL_DIM = rgb(132, 130, 132), COL_OK = rgb(0, 255, 0),
+      COL_WARN = rgb(255, 255, 0), COL_BAD = rgb(255, 0, 0), COL_AMBER = rgb(255, 165, 0);
+const BUILD_TAG = "WEB-1";
+
+function px(x, y, c) { if (x >= 0 && x < W && y >= 0 && y < H) fb[y * W + x] = c; }
+function fillRect(x, y, w, h, c) {
+  x |= 0; y |= 0;
+  for (let j = Math.max(0, y); j < Math.min(H, y + h); j++)
+    for (let i = Math.max(0, x); i < Math.min(W, x + w); i++) fb[j * W + i] = c;
+}
+function dot(x, y, c) { fillRect(x, y, 3, 3, c); }
+
+// 5x7 glyphs for ASCII 0x20..0x7E, five columns each, bit 0 is the top row.
+const FONT = ("0000000000,00005F0000,0007000700,147F147F14,242A7F2A12,2313086462,3649562050,0005030000,001C224100,0041221C00,"
+ + "2A1C7F1C2A,08083E0808,0050300000,0808080808,0060600000,2010080402,3E5149453E,00427F4000,4261514946,2141454B31,"
+ + "1814127F10,2745454539,3C4A494930,0171090503,3649494936,064949291E,0036360000,0056360000,0814224100,1414141414,"
+ + "0041221408,0201510906,32497941 3E,7E1111117E,7F49494936,3E41414122,7F4141221C,7F49494941,7F09090901,3E41495 17A,"
+ + "7F0808087F,00417F4100,2040413F01,7F08142241,7F40404040,7F020C027F,7F040810 7F,3E4141413E,7F09090906,3E4151215E,"
+ + "7F09192946,4649494931,01017F0101,3F4040403F,1F2040201F,3F4038403F,6314081463,0708700807,6151494543,007F414100,"
+ + "0204081020,0041417F00,0402010204,4040404040,0001020400,2054545478,7F48444438,3844444420,38444448 7F,3854545418,"
+ + "087E090102,0C5252523E,7F08040478,00447D4000,2040443D00,7F10284400,00417F4000,7C04180478,7C08040478,3844444438,"
+ + "7C14141408,08141418 7C,7C08040408,4854545420,043F444020,3C4040207C,1C2040201C,3C4030403C,4428102844,0C5050503C,"
+ + "4464544C44,0008364100,00007F0000,0041360800,08082A1C08").replace(/ /g, "").split(",").map(h => {
+   const a = []; for (let i = 0; i < 10; i += 2) a.push(parseInt(h.substr(i, 2), 16)); return a; });
+
+function drawChar(ch, x, y, size, c) {
+  const g = FONT[ch.charCodeAt(0) - 32]; if (!g) return;
+  for (let col = 0; col < 5; col++)
+    for (let row = 0; row < 7; row++)
+      if (g[col] & (1 << row)) fillRect(x + col * size, y + row * size, size, size, c);
+}
+function drawString(str, x, y, c, size = 1) { for (let i = 0; i < str.length; i++) drawChar(str[i], x + i * 6 * size, y, size, c); }
+const textWidth = (s, size = 1) => s.length * 6 * size;
+
+/* ================= FlightViz (ported from FlightViz.h) ================= */
+const FV = (() => {
+  const BAR_W = 6, PITCH = 8, COLS = W / PITCH + 2, COL_MS = 267, SEG_H = 3, SEG_PITCH = 4;
+  const SCROLL_PX_S = PITCH * 1000 / COL_MS, TOP = 12, NSEG = 20, MAX_BAR = NSEG * SEG_PITCH, GROUND = SEG_PITCH;
+  const SPAN_DB = 8, MID = 0.45, AVG_RATE = 0.08, DB_SILENT = -60;
+  const DOT = 3, SHIP_DW = 9, SHIP_DH = 4, SHIP_W = SHIP_DW * DOT, SHIP_H = SHIP_DH * DOT;
+  const SHIP_X_MID = 40, SHIP_X_SWING = 24, SHIP_EASE_S = 0.9, SHIP_CLEAR = 26;
+  const FIRE_MS_MIN = 2400, FIRE_MS_MAX = 4000;
+  const LASER_PX_S = 900, LASER_HOLD_S = 0.12, LASER_TAIL_PX_S = 650, LASER_H = 2;
+  const BOMB_MS_MIN = 3500, BOMB_MS_MAX = 6000, BOMB_VX = 50, BOMB_G = 140;
+  const MAX_MISSILES = 6, MAX_BOMBS = 4, MAX_BURSTS = 6, BURST_S = 0.45, POP_S = 1.1, POP_SPARKS = 16, NSTARS = 40;
+  const STAR_FAR_PX_S = 5, STAR_NEAR_PX_S = 11;
+  const FFT_N = 512, FFT_LOG2 = 9, EQ_BANDS = W / PITCH, EQ_BIN_LO = 1;
+  const EQ_SPAN_DB = 12, EQ_MID = 0.4, EQ_AVG_S = 2.5, EQ_NSEG = NSEG / 2;
+  const EQ_FALL_SEG_S = 28, PEAK_HOLD_S = 0.5, PEAK_FALL_SEG_S = 9, EQ_SILENT_RMS = 33;
+  const MODE_MS = 60000, MODE_MIN_MS = 15000, GAP_MS = 1500, FADE_S = 0.45, CRATER_SEG = 3;
+  const BEAT_DB = 1.5, BEAT_RISE_DB = 1.0, SPAWN_MS_MIN = 1600, SPAWN_MS_MAX = 4500, SPAWN_MS_QUIET = 6000;
+  const MAT_S = 0.7, MAT_R = 46, MAX_TARGETS = 3, MAX_ENEMIES = 6, SWARM_N = 3, MINE_MS = 800, MINE_S = 3.0, MAX_MINES = 8;
+  const EFIRE_MS_MIN = 2200, EFIRE_MS_MAX = 4000, EBULLET_PX_S = 65, MAX_EBULLETS = 6;
+  const DODGE_GAP = 3, DODGE_LOOK_S = 0.9, DODGE_EASE_S = 0.18, SHIELD_MS = 350;
+  const CHASE_EASE_S = 0.35, CHASE_CLEAR = 6, LUNGE_PX = 18, LUNGE_EASE_S = 0.6, AIM_FIRE_MS = 450, ENGAGE_X = W - 80;
+  let EQ_BIN_HI = 170;
+
+  const SHIP = ["M........", "MWWCC....", "WWWWWWWWW", ".BMMMMB.."];
+  const WALKER = 0, SAUCER = 1, MUTANT = 2, BOMBER = 3, POD = 4, SWARMER = 5;
+  const KINDS = [
+    { dw: 5, dh: 3, pxS: 18, wave: 5, waveHz: 2.2, art: [[".PPP.", "PEPEP", "G.G.G"], [".PPP.", "PEPEP", ".G.G."]] },
+    { dw: 7, dh: 2, pxS: 42, wave: 2, waveHz: 5.0, art: [["..CCC..", "OYOOOYO"], ["..CCC..", "OOOYOOO"]] },
+    { dw: 5, dh: 4, pxS: 30, wave: 10, waveHz: 3.0, art: [["R...R", ".RRR.", "RYRYR", ".M.M."], [".R.R.", ".RRR.", "RYRYR", "M.M.M"]] },
+    { dw: 3, dh: 3, pxS: 12, wave: 8, waveHz: 1.2, art: [["QQQ", "QYQ", "QQQ"], ["QQQ", "QWQ", "QQQ"]] },
+    { dw: 3, dh: 3, pxS: 15, wave: 4, waveHz: 1.5, art: [[".S.", "SVS", ".S."], ["S.S", ".V.", "S.S"]] },
+    { dw: 2, dh: 1, pxS: 55, wave: 4, waveHz: 8.0, art: [["OR"], ["RO"]] },
+  ];
+  const enemyW = e => KINDS[e.kind].dw * DOT, enemyH = e => KINDS[e.kind].dh * DOT;
+  const formed = e => e.born >= MAT_S;
+
+  const newEnemy = () => ({ x: 0, y: 0, baseY: 0, phase: 0, mineMs: 0, kind: WALKER, on: false, fireMs: 0, born: MAT_S });
+  const newState = () => ({
+    h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
+    shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0,
+    e: Array.from({ length: MAX_ENEMIES }, newEnemy),
+    mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
+    eb: Array.from({ length: MAX_EBULLETS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
+    shieldUntil: 0, dodging: false, dodgeTo: 0,
+    m: Array.from({ length: MAX_MISSILES }, () => ({ x: 0, y: 0, on: false, head: 0, age: 0, stopped: false })),
+    b: Array.from({ length: MAX_BOMBS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
+    x: Array.from({ length: MAX_BURSTS }, () => ({ x: 0, y: 0, age: 0, on: false, pop: false })),
+    star: Array.from({ length: NSTARS }, () => ({ x: 0, y: 0, kind: 0, near: false })),
+    eq: false, scale: 1, fade: 0, modeSinceMs: 0, silentSinceMs: 0, wasSilent: false,
+    eqDb: new Float32Array(EQ_BANDS), eqFresh: false, eqSilent: true,
+    eqH: new Float32Array(EQ_BANDS), eqPeak: new Float32Array(EQ_BANDS), eqHold: new Float32Array(EQ_BANDS),
+    eqAvg: new Float32Array(EQ_BANDS), eqAvgSet: false,
+    lit: new Uint32Array(MAX_BAR), eqCol: [new Uint32Array(EQ_BANDS), new Uint32Array(EQ_BANDS)],
+    pattern: 0, next: 0, ready: false,
+  });
+
+  function nextRandom(s) {
+    let r = s.rng;
+    r = (r ^ (r << 13)) >>> 0; r = (r ^ (r >>> 17)) >>> 0; r = (r ^ (r << 5)) >>> 0;
+    return (s.rng = r);
+  }
+  function placeStar(s, st, x) {
+    const r = nextRandom(s);
+    st.x = x; st.y = TOP + r % (H - TOP - GROUND);
+    const k = (r >>> 8) % 10;
+    st.kind = k < 4 ? 0 : k < 7 ? 1 : k < 9 ? 2 : 3;
+    if ((r >>> 16) % 10 === 0) st.kind = 3;
+    st.near = (r >>> 20) % 4 === 0;
+  }
+
+  function init(s, nowMs, sampleRate) {
+    EQ_BIN_HI = Math.round(170 * 48000 / sampleRate);  // same frequency range at any sample rate
+    fftReady = false;
+    const STOP = [0, 0.3, 0.6, 0.8, 1.0];
+    const COLOR = [[40, 100, 255], [40, 235, 90], [245, 230, 40], [255, 140, 0], [255, 36, 30]];
+    for (let y = 0; y < MAX_BAR; y++) {
+      const t = Math.floor(y / SEG_PITCH) / (NSEG - 1);
+      let i = 0; while (i < 3 && t > STOP[i + 1]) i++;
+      const u = (t - STOP[i]) / (STOP[i + 1] - STOP[i]);
+      const c = k => Math.trunc(COLOR[i][k] + (COLOR[i + 1][k] - COLOR[i][k]) * u);
+      s.lit[y] = (y % SEG_PITCH >= SEG_H) ? BLACK : rgb(c(0), c(1), c(2));
+    }
+    const KP = [[0, 0, 255], [0, 255, 255], [0, 255, 0], [173, 255, 41], [255, 255, 0], [255, 165, 0], [255, 0, 0], [255, 0, 255]];
+    for (let j = 0; j < EQ_BANDS; j++) {
+      const t = j * 7 / (EQ_BANDS - 1), a = t >= 7 ? 6 : Math.floor(t), u = t - a;
+      s.eqCol[0][j] = rgb(60, 255, 210);
+      const m = k => Math.trunc(KP[a][k] + (KP[a + 1][k] - KP[a][k]) * u);
+      s.eqCol[1][j] = rgb(m(0), m(1), m(2));
+    }
+    s.h.fill(GROUND);
+    s.lastColMs = s.lastFrameMs = nowMs;
+    s.rng = (nowMs | 1) >>> 0;
+    s.nextFireMs = nowMs + FIRE_MS_MIN; s.avgSet = false; s.nextBombMs = nowMs + BOMB_MS_MIN / 2;
+    for (const a of [s.m, s.b, s.x, s.e, s.mine, s.eb]) for (const o of a) o.on = false;
+    s.shieldUntil = nowMs; s.dodging = false; s.beat = false; s.lunge = 0;
+    s.nextSpawnMs = s.nextAimMs = nowMs;
+    s.eq = false; s.pattern = s.next = 0; s.scale = 0; s.fade = 0;
+    s.modeSinceMs = s.silentSinceMs = nowMs; s.wasSilent = false; s.eqFresh = false; s.eqAvgSet = false;
+    s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0);
+    for (const st of s.star) placeStar(s, st, nextRandom(s) % W);
+    s.ready = true;
+  }
+
+  function push(s, rms) {
+    for (let i = COLS - 1; i > 0; i--) s.h[i] = s.h[i - 1];
+    const db = rms > 1 ? 20 * Math.log10(rms / 32767) : DB_SILENT;
+    if (db <= DB_SILENT) { s.h[0] = GROUND; s.prevDb = DB_SILENT; return; }
+    if (!s.avgSet) { s.avgDb = db; s.avgSet = true; }
+    if (db - s.avgDb > BEAT_DB && db - s.prevDb > BEAT_RISE_DB) s.beat = true;
+    s.prevDb = db;
+    let t = MID + (db - s.avgDb) / SPAN_DB;
+    s.avgDb += (db - s.avgDb) * AVG_RATE;
+    t = Math.min(1, Math.max(0, t));
+    s.h[0] = (1 + Math.round(t * (NSEG - 1))) * SEG_PITCH;
+  }
+
+  const colX = (i, off) => W - off - i * PITCH;
+  const scrollOffset = (s, now) => Math.floor(Math.min(now - s.lastColMs, COL_MS) * PITCH / COL_MS);
+  const colAt = (x, off) => { const d = W - off - x; return d < 0 ? -1 : Math.floor((d + PITCH - 1) / PITCH); };
+  const eqHeight = (s, j) => s.eq ? Math.round(s.eqH[j] * s.scale) * SEG_PITCH : 0;
+  function heightAt(s, x, off) {
+    const i = colAt(x, off);
+    let h = i < 0 ? 0 : i < COLS ? s.h[i] : GROUND;
+    if (s.eq && x >= 0 && x < EQ_BANDS * PITCH) h = Math.max(h, eqHeight(s, Math.floor(x / PITCH)));
+    return h;
+  }
+  function carve(s, i, n) { if (i < 0 || i >= COLS) return; s.h[i] = Math.max(GROUND, s.h[i] - n * SEG_PITCH); }
+
+  // 512-point FFT of the newest samples (Float32Array, scaled to +-32767), summed into 30 log-spaced bands.
+  const fftRe = new Float32Array(FFT_N), fftIm = new Float32Array(FFT_N), hann = new Float32Array(FFT_N);
+  const twC = new Float32Array(FFT_N / 2), twS = new Float32Array(FFT_N / 2), rev = new Uint16Array(FFT_N);
+  const bandBin = new Uint16Array(EQ_BANDS + 1);
+  let fftReady = false;
+  function analyze(s, smp) {
+    if (!fftReady) {
+      for (let i = 0; i < FFT_N; i++) {
+        hann[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / FFT_N);
+        let r = 0; for (let b = 0; b < FFT_LOG2; b++) r |= ((i >> b) & 1) << (FFT_LOG2 - 1 - b);
+        rev[i] = r;
+      }
+      for (let i = 0; i < FFT_N / 2; i++) { twC[i] = Math.cos(2 * Math.PI * i / FFT_N); twS[i] = -Math.sin(2 * Math.PI * i / FFT_N); }
+      let last = EQ_BIN_LO - 1;
+      for (let j = 0; j <= EQ_BANDS; j++) {
+        let b = Math.round(EQ_BIN_LO * Math.pow(EQ_BIN_HI / EQ_BIN_LO, j / EQ_BANDS));
+        if (b <= last) b = last + 1;
+        bandBin[j] = b; last = b;
+      }
+      fftReady = true;
+    }
+    let sq = 0;
+    for (let i = 0; i < FFT_N; i++) { const v = smp[i]; sq += v * v; fftRe[rev[i]] = v * hann[i]; fftIm[rev[i]] = 0; }
+    s.eqSilent = Math.sqrt(sq / FFT_N) < EQ_SILENT_RMS;
+    for (let len = 2; len <= FFT_N; len <<= 1) {
+      const half = len >> 1, step = FFT_N / len;
+      for (let i = 0; i < FFT_N; i += len)
+        for (let k = 0; k < half; k++) {
+          const c = twC[k * step], sn = twS[k * step], a = i + k, b = a + half;
+          const xr = fftRe[b] * c - fftIm[b] * sn, xi = fftRe[b] * sn + fftIm[b] * c;
+          fftRe[b] = fftRe[a] - xr; fftIm[b] = fftIm[a] - xi; fftRe[a] += xr; fftIm[a] += xi;
+        }
+    }
+    for (let j = 0; j < EQ_BANDS; j++) {
+      let p = 1e-3;
+      for (let k = bandBin[j]; k < bandBin[j + 1]; k++) p += fftRe[k] * fftRe[k] + fftIm[k] * fftIm[k];
+      s.eqDb[j] = 10 * Math.log10(p);
+    }
+    s.eqFresh = true;
+  }
+
+  function updateEq(s, dt) {
+    if (s.eqFresh) {
+      s.eqFresh = false;
+      if (!s.eqSilent && !s.eqAvgSet) { s.eqAvg.set(s.eqDb); s.eqAvgSet = true; }
+      const k = 1 - Math.exp(-dt / EQ_AVG_S);
+      for (let j = 0; j < EQ_BANDS; j++) {
+        let t = 0;
+        if (!s.eqSilent) { t = EQ_MID + (s.eqDb[j] - s.eqAvg[j]) / EQ_SPAN_DB; s.eqAvg[j] += (s.eqDb[j] - s.eqAvg[j]) * k; }
+        t = Math.min(1, Math.max(0, t));
+        const n = t * EQ_NSEG; if (n > s.eqH[j]) s.eqH[j] = n;
+      }
+    }
+    for (let j = 0; j < EQ_BANDS; j++) {
+      s.eqH[j] = Math.max(0, s.eqH[j] - EQ_FALL_SEG_S * dt);
+      if (s.eqH[j] >= s.eqPeak[j]) { s.eqPeak[j] = s.eqH[j]; s.eqHold[j] = PEAK_HOLD_S; }
+      else if ((s.eqHold[j] -= dt) < 0) { s.eqPeak[j] = Math.max(s.eqH[j], s.eqPeak[j] - PEAK_FALL_SEG_S * dt); }
+    }
+  }
+
+  function updateTurns(s, now, dt) {
+    const silent = s.prevDb <= DB_SILENT;
+    let turn = now - s.modeSinceMs >= MODE_MS, rise = false;
+    if (silent && !s.wasSilent) s.silentSinceMs = now;
+    if (!silent && s.wasSilent && now - s.silentSinceMs >= GAP_MS && now - s.modeSinceMs >= MODE_MIN_MS) turn = true;
+    s.wasSilent = silent;
+    if (turn && s.fade === 0) {
+      s.modeSinceMs = now; s.next = (s.pattern + 1) % 3;
+      if (s.eq) s.fade = -1; else rise = true;
+    }
+    if (s.fade < 0 && (s.scale -= dt / FADE_S) <= 0) { s.scale = 0; s.eq = false; s.fade = 0; rise = true; }
+    if (rise) {
+      s.pattern = s.next;
+      if (s.pattern) { s.eq = true; s.fade = 1; s.scale = 0; s.eqAvgSet = false; s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0); }
+    } else if (s.fade > 0 && (s.scale += dt / FADE_S) >= 1) { s.scale = 1; s.fade = 0; }
+  }
+
+  const interval = (s, lo, hi) => lo + nextRandom(s) % (hi - lo + 1);
+  const shipX = now => { const t = now * 0.001 * 2 * Math.PI;
+    return Math.round(SHIP_X_MID + SHIP_X_SWING * (0.7 * Math.sin(t / 17) + 0.3 * Math.sin(t / 6.3))); };
+  const bobY = now => 1.5 * Math.sin(now * (2 * Math.PI / 3200));
+  function fireLaser(s, sx, sy) {
+    for (const m of s.m) {
+      if (m.on) continue;
+      Object.assign(m, { x: sx + SHIP_W, y: sy + 2 * DOT + Math.trunc((DOT - LASER_H) / 2), on: true, age: 0, stopped: false });
+      m.head = m.x; break;
+    }
+  }
+  const freeBurst = (s, x, y, pop) => { for (const b of s.x) if (!b.on) { Object.assign(b, { x, y, age: 0, on: true, pop }); return; } };
+
+  function update(s, now) {
+    let dt = (now - s.lastFrameMs) * 0.001; if (dt > 0.2) dt = 0.2;
+    s.lastFrameMs = now;
+    const off = scrollOffset(s, now);
+
+    let aim = null;
+    const baseX = shipX(now);
+    for (const e of s.e) if (e.on && e.x > baseX + s.lunge + SHIP_W && e.x < W && (!aim || e.x < aim.x)) aim = e;
+    s.lunge += ((aim ? LUNGE_PX : 0) - s.lunge) * (1 - Math.exp(-dt / LUNGE_EASE_S));
+    const sx = baseX + Math.round(s.lunge);
+
+    updateTurns(s, now, dt);
+    if (s.eq) updateEq(s, dt);
+
+    let tallest = GROUND;
+    for (let x = sx; x < sx + SHIP_W + 60; x += 2) tallest = Math.max(tallest, heightAt(s, x, off));
+    let target = H - tallest - SHIP_H - SHIP_CLEAR;
+    target = Math.min(target, H - GROUND - SHIP_H - SHIP_CLEAR);
+    let ease = SHIP_EASE_S;
+    if (aim) {
+      target = aim.y + enemyH(aim) / 2 - (2 * DOT + Math.trunc(DOT / 2));
+      target = Math.min(target, H - tallest - SHIP_H - CHASE_CLEAR);
+      ease = CHASE_EASE_S;
+    }
+    let threat = false;
+    for (const b of s.eb) {
+      if (!b.on || b.vx >= 0) continue;
+      const t = (sx + SHIP_W - b.x) / b.vx;
+      if ((sx - DOT - b.x) / b.vx < 0 || t > DODGE_LOOK_S) continue;
+      const y = b.y + b.vy * (t > 0 ? t : 0);
+      if (!s.dodging && (y + DOT + 2 <= s.shipY || y - 2 >= s.shipY + SHIP_H)) continue;
+      if (!s.dodging) {
+        const low = H - tallest - SHIP_H - CHASE_CLEAR, above = y - SHIP_H - DODGE_GAP, below = y + DOT + DODGE_GAP;
+        const upOk = above >= TOP + 4, downOk = below <= low;
+        const down = downOk && (!upOk || below - s.shipY < s.shipY - above);
+        s.dodgeTo = down ? below : upOk ? above : s.shipY;
+        s.dodging = true;
+      }
+      target = s.dodgeTo; ease = DODGE_EASE_S; threat = true; break;
+    }
+    if (!threat) s.dodging = false;
+    if (target < TOP + 4) target = TOP + 4;
+    s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
+    const sy = Math.round(s.shipY + bobY(now));
+
+    for (const m of s.m) {
+      if (!m.on) continue;
+      m.age += dt;
+      const from = m.head;
+      if (!m.stopped && (m.head += LASER_PX_S * dt) >= W) { m.head = W; m.stopped = true; }
+      const tail = m.x + (m.age > LASER_HOLD_S ? (m.age - LASER_HOLD_S) * LASER_TAIL_PX_S : 0);
+      if (tail >= m.head) { m.on = false; continue; }
+      if (m.stopped && from >= m.head) continue;
+      let hit = null;
+      for (const e of s.e) {
+        if (!e.on || !formed(e) || e.x + enemyW(e) <= from || e.x >= m.head) continue;
+        if (m.y + LASER_H <= e.y || m.y >= e.y + enemyH(e)) continue;
+        if (!hit || e.x < hit.x) hit = e;
+      }
+      if (hit) {
+        const e = { ...hit };
+        hit.on = false;
+        m.head = e.x > m.x ? e.x : m.x + 1; m.stopped = true;
+        freeBurst(s, e.x + enemyW(e) / 2, e.y + enemyH(e) / 2, true);
+        if (e.kind === POD) {
+          let k = 0;
+          for (const w of s.e) {
+            if (w.on || k === SWARM_N) continue;
+            Object.assign(w, { x: e.x, y: 0, baseY: e.y + (k - 1) * 12, phase: k * 0.7, mineMs: 0, kind: SWARMER, on: true, fireMs: 0, born: MAT_S });
+            w.y = w.baseY; k++;
+          }
+        }
+      }
+    }
+    for (const e of s.e) {
+      if (!e.on) continue;
+      if (!formed(e)) { e.born += dt; continue; }
+      const k = KINDS[e.kind];
+      e.x -= k.pxS * dt; e.phase += dt;
+      let w = Math.sin(e.phase * k.waveHz);
+      if (e.kind === MUTANT) w = Math.asin(w) * (2 / Math.PI);
+      e.y = e.baseY + k.wave * w;
+      if (e.kind === BOMBER && (e.mineMs += dt * 1000) >= MINE_MS) {
+        e.mineMs = 0;
+        for (const m of s.mine) if (!m.on) { Object.assign(m, { x: e.x + enemyW(e) / 2 - Math.trunc(DOT / 2), y: e.y + enemyH(e), age: 0, on: true }); break; }
+      }
+      const ground = H - heightAt(s, Math.trunc(e.x) + Math.trunc(enemyW(e) / 2), off);
+      if (e.y + enemyH(e) + 4 > ground) { e.baseY -= e.y + enemyH(e) + 4 - ground; e.y = ground - enemyH(e) - 4; }
+      if (e.x < -enemyW(e)) e.on = false;
+    }
+    for (const e of s.e) {
+      if (!e.on || !formed(e) || e.kind === POD || e.kind === SWARMER || e.x > W - enemyW(e) || e.x < sx + SHIP_W + 30) continue;
+      if ((e.fireMs -= dt * 1000) > 0) continue;
+      e.fireMs = interval(s, EFIRE_MS_MIN, EFIRE_MS_MAX);
+      const bx = e.x, by = e.y + enemyH(e) / 2;
+      const dx = sx + SHIP_W / 2 - bx, dy = sy + SHIP_H / 2 - by, d = Math.hypot(dx, dy);
+      if (d < 1) continue;
+      for (const b of s.eb) if (!b.on) { Object.assign(b, { x: bx, y: by, vx: EBULLET_PX_S * dx / d, vy: EBULLET_PX_S * dy / d, on: true }); break; }
+    }
+    for (const b of s.eb) {
+      if (!b.on) continue;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.x < -DOT || b.x >= W || b.y < TOP || b.y + DOT >= H - heightAt(s, Math.trunc(b.x), off)) b.on = false;
+      else if (b.x + DOT > sx && b.x < sx + SHIP_W && b.y + DOT > sy && b.y < sy + SHIP_H) { b.on = false; s.shieldUntil = now + SHIELD_MS; }
+    }
+    for (const m of s.mine) {
+      if (!m.on) continue;
+      m.age += dt; m.x -= SCROLL_PX_S * dt;
+      if (m.age >= MINE_S || m.x < -DOT) m.on = false;
+    }
+    const music = s.prevDb > DB_SILENT;
+    if (s.beat || now - s.nextSpawnMs >= (music ? SPAWN_MS_MAX : SPAWN_MS_QUIET) - SPAWN_MS_MIN) {
+      s.beat = false;
+      let targets = 0; for (const e of s.e) targets += e.on && e.kind !== SWARMER ? 1 : 0;
+      if (targets < MAX_TARGETS && now - s.nextSpawnMs >= 0) {
+        for (const e of s.e) {
+          if (e.on) continue;
+          const r = nextRandom(s), k = r % 20;
+          e.kind = k < 7 ? WALKER : k < 11 ? SAUCER : k < 14 ? MUTANT : k < 17 ? BOMBER : POD;
+          e.mineMs = 0; e.baseY = e.y = TOP + 4 + ((r >>> 8) % 48);
+          if (e.kind === WALKER) { e.x = W - 30 - enemyW(e) - ((r >>> 14) % 60); e.born = 0; }
+          else { e.x = W; e.born = MAT_S; }
+          e.phase = 0; e.fireMs = interval(s, 400, 1200); e.on = true;
+          s.nextSpawnMs = now + SPAWN_MS_MIN; break;
+        }
+      }
+    }
+    for (const b of s.b) {
+      if (!b.on) continue;
+      b.x += b.vx * dt; b.y += b.vy * dt + 0.5 * BOMB_G * dt * dt; b.vy += BOMB_G * dt;
+      const bx = Math.trunc(b.x), ground = H - heightAt(s, bx, off);
+      if (b.y + DOT - 1 >= ground) {
+        b.on = false;
+        const i = colAt(bx + Math.trunc(DOT / 2), off);
+        carve(s, i, CRATER_SEG); carve(s, i - 1, 1); carve(s, i + 1, 1);
+        freeBurst(s, bx, ground - 1, false);
+      } else if (bx >= W) b.on = false;
+    }
+    for (const x of s.x) {
+      if (!x.on) continue;
+      x.age += dt;
+      if (!x.pop) x.x -= SCROLL_PX_S * dt;
+      if (x.age >= (x.pop ? POP_S : BURST_S) || x.x < -8) x.on = false;
+    }
+    for (const st of s.star) {
+      st.x -= (st.near ? STAR_NEAR_PX_S : STAR_FAR_PX_S) * dt;
+      if (st.x < -2) placeStar(s, st, W + 1);
+    }
+    if (aim) {
+      const nose = sy + 2 * DOT + Math.trunc(DOT / 2), mid = Math.trunc(aim.y) + Math.trunc(enemyH(aim) / 2);
+      if (Math.abs(nose - mid) <= DOT && aim.x < ENGAGE_X && formed(aim) && now - s.nextAimMs >= 0) {
+        s.nextAimMs = now + AIM_FIRE_MS; s.nextFireMs = now + interval(s, FIRE_MS_MIN, FIRE_MS_MAX);
+        fireLaser(s, sx, sy);
+      }
+    } else if (now - s.nextFireMs >= 0) {
+      s.nextFireMs = now + interval(s, FIRE_MS_MIN, FIRE_MS_MAX);
+      fireLaser(s, sx, sy);
+    }
+    if (now - s.nextBombMs >= 0) {
+      s.nextBombMs = now + interval(s, BOMB_MS_MIN, BOMB_MS_MAX);
+      for (const b of s.b) if (!b.on) { Object.assign(b, { x: sx + 3 * DOT, y: sy + SHIP_H, vx: BOMB_VX, vy: 0, on: true }); break; }
+    }
+  }
+
+  const C = {
+    white: rgb(255, 255, 255), yellow: rgb(255, 230, 64), orange: rgb(255, 140, 0), red: rgb(220, 40, 24),
+    spark: [rgb(0, 224, 255), rgb(255, 80, 200), rgb(255, 230, 64), rgb(120, 255, 120)],
+    star: [rgb(110, 110, 130), rgb(235, 235, 255), rgb(255, 220, 60), rgb(255, 110, 200)],
+    EP: rgb(255, 96, 200), EE: rgb(255, 255, 255), EG: rgb(60, 220, 90), EC: rgb(0, 224, 255), EO: rgb(255, 150, 30),
+    EY: rgb(255, 250, 170), ER: rgb(255, 50, 40), EM: rgb(224, 48, 200), EQ: rgb(70, 100, 255), ES: rgb(255, 220, 40), EV: rgb(170, 80, 255),
+    EB_A: rgb(255, 120, 40), EB_B: rgb(255, 255, 200),
+    beam: [rgb(255, 255, 255), rgb(0, 224, 255), rgb(255, 80, 200), rgb(255, 230, 64), rgb(120, 255, 120)],
+    Wh: rgb(236, 236, 236), B: rgb(120, 128, 160), M: rgb(224, 48, 200), Cy: rgb(0, 224, 255), F1: rgb(255, 120, 0), F2: rgb(255, 240, 96),
+    SH: rgb(120, 240, 255), peak: rgb(255, 255, 255),
+  };
+
+  function drawPop(x) {
+    const cx = Math.round(x.x), cy = Math.round(x.y);
+    if (x.age < 0.12) {
+      for (const [ox, oy] of [[0, 0], [-DOT, 0], [DOT, 0], [0, -DOT], [0, DOT]]) dot(cx - 1 + ox, cy - 1 + oy, C.white);
+    }
+    const shift = Math.floor(x.age * 10);
+    for (let i = 0; i < POP_SPARKS; i++) {
+      const a = i * (2 * Math.PI / POP_SPARKS) + ((i & 1) ? 0.2 : 0);
+      const r = DOT + x.age * ((i & 1) ? 230 : 150);
+      const px0 = cx + Math.trunc(Math.cos(a) * r), py0 = cy + Math.trunc(Math.sin(a) * r), c = C.spark[(i + shift) & 3];
+      if (x.age < 0.35) dot(px0 - 1, py0 - 1, c); else fillRect(px0, py0, 2, 2, c);
+    }
+  }
+  function drawBurst(x) {
+    if (x.pop) return drawPop(x);
+    const DIR = [[1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0]];
+    const cx = Math.round(x.x) - 1, cy = Math.round(x.y) - DOT + 1, t = x.age / BURST_S;
+    if (t < 0.25) { dot(cx, cy, C.white); dot(cx - DOT, cy, C.yellow); dot(cx + DOT, cy, C.yellow); dot(cx, cy - DOT, C.yellow); }
+    const c = t < 0.35 ? C.yellow : t < 0.7 ? C.orange : C.red, r = DOT + Math.trunc(x.age * 30);
+    for (const d of DIR) dot(cx + d[0] * r, cy + d[1] * r, c);
+  }
+
+  function render(s, now) {
+    fb.fill(BLACK);
+    const off = scrollOffset(s, now);
+    for (let i = 0; i < NSTARS; i++) {
+      const st = s.star[i];
+      if (st.kind === 1 && (Math.floor(now / 150) + i * 7) % 23 === 0) continue;
+      const x = Math.trunc(st.x), y = st.y, c = C.star[st.kind];
+      px(x, y, c);
+      if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
+    }
+    for (let i = 0; i < COLS; i++) {
+      const x0 = colX(i, off), h = s.h[i];
+      for (let dx = 0; dx < BAR_W; dx++) {
+        const x = x0 + dx; if (x < 0 || x >= W) continue;
+        for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = s.lit[k];
+      }
+    }
+    if (s.eq) {
+      for (let j = 0; j < EQ_BANDS; j++) {
+        const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
+        let peak = s.scale >= 1 ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
+        if (peak < h) peak = -1;
+        for (let dx = 0; dx < BAR_W; dx++) {
+          const x = x0 + dx;
+          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? s.eqCol[s.pattern - 1][j] : BLACK;
+          if (peak >= 0) for (let k = peak; k < peak + SEG_H; k++) fb[(H - 1 - k) * W + x] = C.peak;
+        }
+      }
+    }
+    for (const x of s.x) if (x.on) drawBurst(x);
+
+    const frame = Math.floor(now / 250) & 1;
+    const colOf = { P: C.EP, E: C.EE, W: C.EE, G: C.EG, C: C.EC, O: C.EO, R: C.ER, M: C.EM, Q: C.EQ, S: C.ES, V: C.EV, Y: C.EY };
+    s.e.forEach((e, idx) => {
+      if (!e.on) return;
+      const k = KINDS[e.kind], u = formed(e) ? 1 : e.born / MAT_S, spread = MAT_R * (1 - u) * (1 - u);
+      for (let y = 0; y < k.dh; y++)
+        for (let x = 0; x < k.dw; x++) {
+          const ch = k.art[frame][y][x]; if (ch === '.') continue;
+          let ox = 0, oy = 0;
+          if (spread > 0) {
+            const hh = Math.imul(idx * 97 + y * 31 + x * 17, 2654435761) >>> 0;
+            const a = (hh >>> 8) * (2 * Math.PI / 16777216);
+            ox = Math.trunc(Math.cos(a) * spread); oy = Math.trunc(Math.sin(a) * spread);
+          }
+          dot(Math.trunc(e.x) + x * DOT + ox, Math.trunc(e.y) + y * DOT + oy, colOf[ch] || C.EY);
+        }
+    });
+    s.mine.forEach((m, i) => { if (m.on) dot(Math.trunc(m.x), Math.trunc(m.y), ((Math.floor(now / 120) + i) & 1) ? C.ER : C.EE); });
+    s.eb.forEach((b, i) => { if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), ((Math.floor(now / 80) + i) & 1) ? C.EB_A : C.EB_B); });
+
+    for (const m of s.m) {
+      if (!m.on) continue;
+      const tail = Math.trunc(m.x + (m.age > LASER_HOLD_S ? (m.age - LASER_HOLD_S) * LASER_TAIL_PX_S : 0));
+      const head = Math.trunc(m.head), len = head - tail;
+      for (let x = tail; x < head; x++) {
+        if (x - tail < len / 3 && ((x >> 2) & 1)) continue;
+        const c = head - x < 6 ? C.beam[0] : C.beam[1 + ((Math.floor((x - Math.trunc(m.x)) / 8) + Math.trunc(m.age * 30)) & 3)];
+        for (let y = 0; y < LASER_H; y++) px(x, m.y + y, c);
+      }
+    }
+    for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
+
+    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now));
+    for (let y = 0; y < SHIP_DH; y++)
+      for (let x = 0; x < SHIP_DW; x++) {
+        const c = SHIP[y][x]; if (c === '.') continue;
+        dot(sx + x * DOT, sy + y * DOT, c === 'W' ? C.Wh : c === 'B' ? C.B : c === 'M' ? C.M : C.Cy);
+      }
+    if (s.shieldUntil - now > 0 && (Math.floor(now / 50) & 1)) {
+      const fx = sx + SHIP_W + DOT;
+      for (let y = -1; y <= SHIP_DH; y++) dot(fx + (y < 0 || y === SHIP_DH ? -DOT : 0), sy + y * DOT, C.SH);
+      dot(sx + Math.trunc(SHIP_W / 2), sy - 2 * DOT, C.SH);
+      dot(sx + Math.trunc(SHIP_W / 2), sy + SHIP_H + DOT, C.SH);
+    }
+    dot(sx - DOT, sy + 2 * DOT, C.F2);
+    if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
+  }
+
+  return { newState, init, push, analyze, update, render, COL_MS, DB_SILENT, MODE_MS, EQ_BANDS };
+})();
+
+/* ================= KeyEarth (ported from KeyEarth.h): the spinning Earth of the keyboard screen ================= */
+const Earth = (() => {
+  const NX = 12, NY = 24, PX = 8, PY = 4, BW = 6, BH = 3, OX = 2, OY = 2, CX = 50, CY = 50;
+  const TILT_DEG = 20, TURN_MS = 60000, LON_START = 135, NSTARS = 16;
+  const DIM = [
+    { x0: CX - 21, y0: CY - 20, x1: CX + 21, y1: CY, roundTop: true, roundBottom: false, mouse: false },
+    { x0: CX - 33, y0: CY, x1: CX + 32, y1: CY + 20, roundTop: false, roundBottom: true, mouse: false },
+    { x0: CX - 33, y0: CY - 11, x1: CX + 32, y1: CY + 9, roundTop: true, roundBottom: true, mouse: true },
+  ];
+  const LAND = [
+    [85, -60, -20],
+    [75, -120, -70], [75, -60, -20], [75, 15, 25], [75, 50, 60], [75, 80, 140],
+    [65, -168, -60], [65, -50, -25], [65, -22, -14], [65, 5, 180],
+    [55, -135, -95], [55, -80, -58], [55, -8, -2], [55, 8, 140], [55, 155, 162],
+    [45, -125, -60], [45, -5, 145],
+    [35, -120, -77], [35, -10, 10], [35, 35, 122], [35, 130, 140],
+    [25, -110, -97], [25, -15, 57], [25, 68, 120],
+    [15, -92, -84], [15, -17, 50], [15, 74, 80], [15, 98, 108],
+    [5, -77, -50], [5, -8, 48], [5, 100, 118],
+    [-5, -80, -35], [-5, 10, 40], [-5, 105, 115], [-5, 120, 125], [-5, 135, 150],
+    [-15, -75, -40], [-15, 12, 40], [-15, 44, 50], [-15, 125, 145],
+    [-25, -70, -48], [-25, 15, 33], [-25, 44, 47], [-25, 114, 153],
+    [-35, -72, -57], [-35, 18, 25], [-35, 116, 140], [-35, 172, 178],
+    [-45, -75, -65], [-45, 167, 172],
+    [-55, -72, -66],
+    [-65, -70, -55], [-65, 40, 160],
+    [-75, -150, -60], [-75, -30, 180],
+    [-85, -180, 180],
+  ];
+  const isLand = (band, lon) => LAND.some(r => r[0] === band && r[1] <= lon && lon <= r[2]);
+  const cell = Array.from({ length: NY }, () => Array.from({ length: NX }, () => ({ on: false, polar: false, band: 0, lon: 0, shade: 0, dim: false, dimM: false })));
+  const stars = [];
+  const STAR_C = [rgb(110, 110, 130), rgb(235, 235, 255), rgb(255, 220, 60), rgb(255, 110, 200)];
+
+  (function begin() {
+    const c = Math.cos(TILT_DEG * Math.PI / 180), s = Math.sin(TILT_DEG * Math.PI / 180);
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+      const x = (i + 0.5 - NX / 2) / (NX / 2), y = (NY / 2 - j - 0.5) / (NY / 2), d = x * x + y * y, e = cell[j][i];
+      if (d > 1) continue;
+      const z = Math.sqrt(1 - d), yy = y * c + z * s, zz = -y * s + z * c, lat = Math.asin(yy) * 180 / Math.PI;
+      const band = Math.floor(lat / 10) * 10 + 5;
+      e.on = true; e.polar = Math.abs(lat) > 68;
+      e.band = band > 85 ? 85 : band < -85 ? -85 : band;
+      e.lon = Math.round(Math.atan2(x, zz) * 180 / Math.PI);
+      e.shade = Math.trunc((0.45 + 0.55 * z) * 255);
+    }
+    for (const d of DIM) {
+      let jTop = NY, jBottom = -1, iMin = NX, iMax = -1;
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+        const x0 = OX + i * PX, y0 = OY + j * PY;
+        if (x0 + BW <= d.x0 || x0 >= d.x1 || y0 + BH <= d.y0 || y0 >= d.y1) continue;
+        cell[j][i][d.mouse ? 'dimM' : 'dim'] = true;
+        jTop = Math.min(jTop, j); jBottom = Math.max(jBottom, j); iMin = Math.min(iMin, i); iMax = Math.max(iMax, i);
+      }
+      if (iMax < 0) continue;
+      for (const j of [d.roundTop ? jTop : -1, d.roundBottom ? jBottom : -1]) {
+        if (j < 0) continue;
+        cell[j][iMin][d.mouse ? 'dimM' : 'dim'] = false; cell[j][iMax][d.mouse ? 'dimM' : 'dim'] = false;
+      }
+    }
+    let rng = 3;
+    for (let tries = 0; tries < 400 && stars.length < NSTARS; tries++) {
+      rng = (rng ^ (rng << 13)) >>> 0; rng = (rng ^ (rng >>> 17)) >>> 0; rng = (rng ^ (rng << 5)) >>> 0;
+      const x = rng % 101, y = (rng >>> 8) % 97, k = (rng >>> 16) % 10, near = (rng >>> 20) % 4 === 0;
+      if ((x - CX) ** 2 + (y - CY) ** 2 < 52 * 52) continue;
+      stars.push({ x, y, near, kind: k < 4 ? 0 : k < 7 ? 1 : k < 9 ? 2 : 3 });
+    }
+  })();
+
+  function draw(now, letters, mouse) {
+    stars.forEach((st, n) => {
+      if (st.kind === 1 && (Math.floor(now / 250) + n * 7) % 23 === 0) return;
+      fillRect(st.x, st.y, st.near ? 2 : 1, st.near ? 2 : 1, STAR_C[st.kind]);
+    });
+    const lon0 = LON_START - Math.floor((now % TURN_MS) * 360 / TURN_MS);
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+      const e = cell[j][i]; if (!e.on) continue;
+      const lon = (((e.lon + lon0) % 360) + 540) % 360 - 180;
+      let r, g, b;
+      if (e.polar) [r, g, b] = [230, 240, 255]; else if (isLand(e.band, lon)) [r, g, b] = [40, 230, 70]; else [r, g, b] = [20, 90, 255];
+      r = Math.trunc(r * e.shade / 255); g = Math.trunc(g * e.shade / 255); b = Math.trunc(b * e.shade / 255);
+      if (mouse ? e.dimM : e.dim) { r = Math.trunc(r / 3); g = Math.trunc(g / 3); b = Math.trunc(b / 3); }
+      fillRect(OX + i * PX, OY + j * PY, BW, BH, rgb(r, g, b));
+    }
+    if (mouse) drawString("MOUSE", CX - 30, CY - 8, letters, 2);
+    else { drawString("KEY", CX - 18, CY - 17, letters, 2); drawString("BOARD", CX - 30, CY + 1, letters, 2); }
+  }
+  return { draw };
+})();
+
+/* ================= Screens: keyboard (text input) mode, help, start ================= */
+const KANA_A = [0x020, 0x0FC, 0x024, 0x07E, 0x0A9, 0x131, 0x121, 0x0C6];
+function drawKanaA(x, y, c) {
+  for (let r = 0; r < 8; r++) for (let col = 0; col < 9; col++) if (KANA_A[r] & (0x100 >> col)) px(x + col, y + r, c);
+}
+const ICON_CMD = [0x22, 0x55, 0x3E, 0x14, 0x3E, 0x55, 0x22], ICON_OPT = [0x67, 0x10, 0x10, 0x08, 0x08, 0x07, 0x00],
+      ICON_WIN = [0x77, 0x77, 0x77, 0x00, 0x77, 0x77, 0x77];
+function drawIcon(icon, x, y, c) {
+  for (let r = 0; r < 7; r++) for (let col = 0; col < 7; col++) if (icon[r] & (0x40 >> col)) px(x + col, y + r, c);
+}
+function drawHelp(key, meaning, x, y, meaningX) {
+  drawString(key, x, y, COL_AMBER); drawString(meaning, meaningX, y, COL_FG);
+}
+function drawKeys(now) {
+  fb.fill(COL_BG);
+  Earth.draw(now, COL_FG, ui.airOn);
+  let x = 4;
+  drawString("USB", x, 99, COL_OK);
+  x += textWidth("USB") + 6;
+  drawString(ui.osWin ? "Win" : "Mac", x, 99, COL_FG);
+  x += 24;
+  drawString("A", x, 99, ui.inputKana === 0 ? COL_AMBER : COL_FG);
+  drawString("/", x + 6, 99, COL_FG);
+  drawKanaA(x + 12, 99, ui.inputKana === 1 ? COL_AMBER : COL_FG);
+  drawHelp("Fn+O", "Mac/Win", 4, 108, 46);
+  drawHelp("Fn+[ ]", "A/", 4, 117, 46);
+  drawKanaA(46 + 12, 117, COL_FG);
+
+  const SHEET = [["Fn+;,./", "Arrows"], ["Fn+Sh+", "PgUp/End"], ["Fn+`", "Esc"], ["Fn+1..=", "F1-F12"], ["Fn+Del", "Delete"]];
+  const MAC = [["alt", "Command", ICON_CMD], ["opt", "Option", ICON_OPT], ["alt+C/V", "copy/paste"]];
+  const WIN = [["alt", "Alt"], ["opt", "Win", ICON_WIN], ["ctrl+C/V", "copy/paste"]];
+  const sx = 108, mx = 164;
+  let y = 2;
+  if (ui.airOn) {
+    const cross = (key, meaning, cx, yy) => {
+      drawString(key, cx - Math.trunc(textWidth(key) / 2), yy, COL_AMBER);
+      drawString(meaning, cx - Math.trunc(textWidth(meaning) / 2), yy + 10, COL_FG);
+    };
+    const cl = 128, cm = 172, cr = 216;
+    drawHelp("tilt", "Move", 110, 3, 140);
+    cross("E ;", "Up", cm, 20); cross("A ,", "Click", cl, 52); cross("S", "Enter", cm, 52);
+    cross("D /", "R-click", cr, 52); cross("Z .", "Down", cm, 84);
+    drawHelp("A+tilt", "Drag", 110, 112, 152);
+    drawString("let go of G0: keys", 110, 125, COL_DIM);
+  } else {
+    drawHelp("Fn+M", "mode", sx, y, mx);
+    y += 12;
+    for (const h of SHEET) { drawHelp(h[0], h[1], sx, y, mx); y += 9; }
+    y += 3;
+    for (const h of ui.osWin ? WIN : MAC) {
+      drawHelp(h[0], h[1], sx, y, mx);
+      if (h[2]) drawIcon(h[2], mx + textWidth(h[1]) + 4, y, COL_FG);
+      y += 9;
+    }
+    drawHelp("G0+tilt", "Move", sx, y + 3, mx);
+  }
+}
+
+/* ================= Measure, help and the emblem screen (ported from KeySpeaker_S0.ino) ================= */
+const MODE_DATA = 0, MODE_GAME = 1, MODE_KEYS = 2, MODE_NAME = ["measure", "flight", "keyboard"];
+const SPLASH_MS = 2000, IDLE_MS = 60000, BOOST_MAX_DB = 18, BOOST_STEP_DB = 3, RING_MS = 500, START_FILL_MS = 100, VOL_MIN_DB = -50;
+const ui = { mode: MODE_GAME, splashOn: true, splashIdle: false, splashStartMs: 0, splashDrawn: false, helpOn: false,
+  osWin: false, inputKana: -1, airOn: false, volDb: -10, muted: false, boostDb: 9, bassCut: false, groveAux: false,
+  lastKeyMs: 0, lastSoundMs: 0, lastScreen: 0, fillMin: Infinity, fillMax: 0, playMs: 0, since: 0 };
+try { const m = parseInt(localStorage.getItem("ks_mode"), 10); if (m >= 0 && m < 3) ui.mode = m; } catch (e) {}
+const lcd = document.getElementById("lcd"), lctx = lcd.getContext("2d");
+const img = new ImageData(new Uint8ClampedArray(fb.buffer), W, H);
+const flight = FV.newState();
+const meter = { inPk: 0, outPk: 0 };
+
+function drawRect(x, y, w, h, c) {
+  for (let i = 0; i < w; i++) { px(x + i, y, c); px(x + i, y + h - 1, c); }
+  for (let j = 0; j < h; j++) { px(x, y + j, c); px(x + w - 1, y + j, c); }
+}
+function drawMeasure(now) {
+  fb.fill(COL_BG);
+  drawString("KeySpeaker", 4, 2, COL_AMBER, 2);
+  drawString(BUILD_TAG, 206, 2, COL_DIM);
+  const sounding = isSounding(), mounted = A.src !== "none" || ui.groveAux;
+  drawString("USB " + (sounding ? "STREAMING" : mounted ? "MOUNTED (no stream)" : "NOT CONNECTED") + "  SOF" + (sounding ? "+" : "-"), 4, 24,
+    sounding ? COL_OK : mounted ? COL_WARN : COL_BAD);
+  // The buffer: a demo value around the firmware's 100 ms start level.
+  const fillMs = sounding ? Math.round(START_FILL_MS + 9 * Math.sin(now / 900) + 4 * Math.sin(now / 230)) : 0;
+  if (sounding) { ui.fillMin = Math.min(ui.fillMin, fillMs); ui.fillMax = Math.max(ui.fillMax, fillMs); }
+  drawRect(4, 38, 232, 10, COL_DIM);
+  fillRect(4, 38, Math.trunc(fillMs * 232 / RING_MS), 10, fillMs < 30 ? COL_BAD : fillMs > 400 ? COL_WARN : COL_OK);
+  fillRect(4 + Math.trunc(START_FILL_MS * 232 / RING_MS), 36, 1, 14, COL_FG);
+  const p3 = (n, w) => String(n).padStart(w, " ");
+  drawString("buffer " + p3(fillMs, 3) + " ms  (min " + (ui.fillMin === Infinity ? 0 : ui.fillMin) + " / max " + ui.fillMax + ")", 4, 52, COL_FG);
+  drawString("underrun 0  overrun 0", 4, 64, COL_FG);
+  const playS = Math.floor(ui.playMs / 1000), mm = Math.floor(playS / 60), ss = String(playS % 60).padStart(2, "0");
+  drawString("adj +0 ppm  trend " + (playS >= 30 ? "+0" : "--") + "  (" + mm + ":" + ss + ")", 4, 76, COL_FG);
+  const el = Math.floor((now - ui.since) / 1000);
+  drawString("since " + Math.floor(el / 3600) + ":" + String(Math.floor(el / 60) % 60).padStart(2, "0") + ":" + String(el % 60).padStart(2, "0") + "  boot 1 web", 4, 88, COL_FG);
+  drawString("PC vol " + ui.volDb + " dB" + (ui.muted ? " MUTE" : "") + "  L" + ui.volDb + " R" + ui.volDb + (ui.groveAux ? "  +AUX" : ""), 4, 100, COL_FG);
+  // Level meters: in (after the host volume) and out (after boost and the limiter), the peak since the last redraw.
+  const gain = ui.muted ? 0 : Math.pow(10, ui.volDb / 20), pkIn = Math.min(32767, meter.inPk * 32768 * gain);
+  const pkOut = Math.min(0.89 * 32767, pkIn * Math.pow(10, ui.boostDb / 20));
+  meter.inPk = 0;
+  drawRect(4, 112, 60, 8, COL_DIM); fillRect(4, 112, Math.trunc(pkIn * 60 / 32768), 8, COL_OK);
+  drawRect(68, 112, 60, 8, COL_DIM); fillRect(68, 112, Math.trunc(pkOut * 60 / 32768), 8, pkOut >= 0.89 * 32767 * 0.98 ? COL_WARN : COL_OK);
+  drawString("+" + ui.boostDb + "dB " + (ui.bassCut ? "cut" : "full"), 134, 112, COL_FG);
+  drawString("[ ]\\ vol  spc play  v view  h help", 4, 125, COL_DIM);
+}
+
+function drawSpeakerHelp() {
+  fb.fill(COL_BG);
+  drawString("HELP", 6, 4, COL_AMBER, 2);
+  drawString(ui.mode === MODE_GAME ? "flight mode" : "measure mode", 60, 10, COL_DIM);
+  drawString(BUILD_TAG, 236 - textWidth(BUILD_TAG), 4, COL_DIM);
+  const LEFT = [["[ ]", "volume"], ["\\", "mute"], ["space", "play/pause"], [", /", "prev/next"], ["- =", "boost"], ["b", "bass cut"]];
+  const RIGHT = [["v", "measure/flight"], ["r", "reset counts"], ["h", "close help"], ["Fn+M", "next mode"], ["Fn+O", "Mac/Win"],
+                 ["Fn+A", ui.groveAux ? "AUX on" : "AUX off"]];
+  let y = 30;
+  for (const h of LEFT) { drawHelp(h[0], h[1], 6, y, 44); y += 15; }
+  y = 30;
+  for (const h of RIGHT) { drawHelp(h[0], h[1], 124, y, 156); y += 15; }
+  drawString("+" + ui.boostDb + "dB " + (ui.bassCut ? "cut" : "full") + "  " + (ui.muted ? "MUTE" : ""), 124, 30 + 6 * 15, COL_DIM);
+}
+
+// The emblem screen, from the firmware's own images (Splash.h): at start with the name, at rest with the hint line.
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const SP = (() => {
+  const g = b64(SPLASH.grille), e = b64(SPLASH.emblem);
+  const u16 = (a, n) => Uint16Array.from({ length: n }, (_, i) => a[2 * i] | (a[2 * i + 1] << 8));
+  return { grille: u16(g, W * H), emblem: u16(e, SPLASH.emblemW * SPLASH.emblemH), alpha: b64(SPLASH.alpha) };
+})();
+function c565(v) {
+  const r = (v >> 11) & 31, g = (v >> 5) & 63, b = v & 31;
+  return rgb((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2));
+}
+const shake = { dx: 0, dy: 0, step: 0, x: 0, y: 0, level: 0, peak: 0 };
+function shakeService() {                       // the emblem jumps 1 or 2 px on loud beats and settles back
+  const p = shake.peak; shake.peak = 0;
+  let x = 0, y = 0;
+  if (shake.step === 0 && p >= 2000 && p > shake.level * 1.4) {
+    const DIRS = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]], d = DIRS[Math.floor(Math.random() * 8)];
+    const amp = p > 8000 && p > shake.level * 2.2 ? 2 : 1;
+    shake.dx = d[0]; shake.dy = d[1]; x = d[0] * amp; y = d[1] * amp; shake.step = 1;
+  } else if (shake.step === 1) { x = -shake.dx; y = -shake.dy; shake.step = 2; }
+  else shake.step = 0;
+  shake.level += (p - shake.level) * 0.1;
+  const moved = x !== shake.x || y !== shake.y;
+  shake.x = x; shake.y = y;
+  return moved;
+}
+function showSplash(idle, now) {
+  ui.splashOn = true; ui.splashDrawn = false; ui.splashIdle = idle; ui.splashStartMs = now;
+  shake.peak = 0; shake.level = 0; shake.step = shake.x = shake.y = 0;
+}
+function drawHintLine(pairs, y) {
+  const gap = textWidth("  ");
+  let w = -gap;
+  for (let i = 0; i < pairs.length; i += 2) w += textWidth(pairs[i]) + textWidth(" ") + textWidth(pairs[i + 1]) + gap;
+  let x = 120 - Math.trunc(w / 2);
+  for (let i = 0; i < pairs.length; i += 2) {
+    drawString(pairs[i], x, y, COL_AMBER); x += textWidth(pairs[i]) + textWidth(" ");
+    drawString(pairs[i + 1], x, y, c565(0xD69A)); x += textWidth(pairs[i + 1]) + gap;
+  }
+}
+function drawSplash() {
+  const s = Uint16Array.from(SP.grille), EW = SPLASH.emblemW, EH = SPLASH.emblemH;
+  for (let y = 0; y < EH; y++) for (let x = 0; x < EW; x++) {
+    const a = SP.alpha[y * EW + x]; if (!a) continue;
+    const e = SP.emblem[y * EW + x], i = (SPLASH.emblemY + shake.y + y) * W + SPLASH.emblemX + shake.x + x;
+    if (i < 0 || i >= W * H) continue;
+    if (a === 255) { s[i] = e; continue; }
+    const d = s[i], r = ((d >> 11) * (255 - a) + (e >> 11) * a) / 255 | 0, g = (((d >> 5) & 63) * (255 - a) + ((e >> 5) & 63) * a) / 255 | 0,
+          b = ((d & 31) * (255 - a) + (e & 31) * a) / 255 | 0;
+    s[i] = (r << 11) | (g << 5) | b;
+  }
+  if (ui.splashIdle) for (let i = W * 121; i < W * H; i++) {   // at rest the grille's bottom darkens to about 40 %
+    const c = s[i]; s[i] = ((((c >> 11) * 2 / 5) | 0) << 11) | (((((c >> 5) & 63) * 2 / 5) | 0) << 5) | (((c & 31) * 2 / 5) | 0);
+  }
+  for (let i = 0; i < W * H; i++) fb[i] = c565(s[i]);
+  if (ui.splashIdle) drawHintLine(["h", "HELP", "Fn+M", "KEYBOARD"], 125);
+  else { drawString("KeySpeaker", 61, 108, COL_BG, 2); drawString("KeySpeaker", 60, 107, COL_FG, 2); }
+}
+
+/* ================= audio: the sound this computer is playing (screen / tab sharing) ================= */
+const A = { ac: null, analyser: null, sink: null, src: "none", node: null, stream: null, sr: 48000 };
+const td = new Float32Array(2048), smp = new Float32Array(512);
+const $ = id => document.getElementById(id);
+// Page language: English (main) or Japanese (sub). The screen itself is always English, like the device.
+let lang = "en";                                      // English is the main language; Japanese is the sub, chosen with the switch
+try { if (localStorage.getItem("ks_lang") === "ja") lang = "ja"; } catch (e) {}
+let msgPair = ["", ""];
+const showMsg = () => { $("msg").textContent = msgPair[lang === "ja" ? 0 : 1]; };
+const say = (ja, en) => { msgPair = [ja, en]; showMsg(); };
+function setLang(l) {
+  lang = l; document.documentElement.dataset.lang = l; document.documentElement.lang = l;
+  try { localStorage.setItem("ks_lang", l); } catch (e) {}
+  document.querySelectorAll("[data-setlang]").forEach(b => b.classList.toggle("act", b.dataset.setlang === l));
+  showMsg(); syncUi();
+}
+const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+
+function ensureAudio() {
+  if (!A.ac) {
+    const ac = A.ac = new (window.AudioContext || window.webkitAudioContext)();
+    A.analyser = ac.createAnalyser(); A.analyser.fftSize = 2048; A.analyser.smoothingTimeConstant = 0;
+    A.sink = ac.createGain(); A.sink.gain.value = 0; A.analyser.connect(A.sink); A.sink.connect(ac.destination);
+    A.sr = ac.sampleRate;
+    FV.init(flight, performance.now() | 0, A.sr);
+  }
+  if (A.ac.state === "suspended") A.ac.resume();
+  return A.ac;
+}
+function syncUi() {
+  $("bShare").setAttribute("aria-pressed", A.src === "capture" ? "true" : "false");
+  $("shareLabel").textContent = A.src === "capture" ? (lang === "ja" ? "STOP(取り込みを止める)" : "STOP (stop capturing)") : (lang === "ja" ? "START(PCの音を取り込む)" : "START (capture the PC's sound)");
+}
+function stopSource() {
+    if (A.node) { try { A.node.stop && A.node.stop(); } catch (e) {} try { A.node.disconnect(); } catch (e) {} A.node = null; }
+  if (A.stream) { A.stream.getTracks().forEach(t => t.stop()); A.stream = null; }
+  A.src = "none"; syncUi();
+}
+async function startCapture() {
+  if (!canCapture) { say("このブラウザは音の取り込みに対応していません。", "This browser cannot capture audio."); return; }
+  const ac = ensureAudio();
+  try {
+    // Browsers insist on asking for video as well; it is thrown away below.
+    // Choosing a tab normally brings that tab to the front, hiding this page. CaptureController keeps the focus here.
+    const opts = { video: true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+                   selfBrowserSurface: "exclude", systemAudio: "include", surfaceSwitching: "exclude" };
+    let controller = null;
+    if (typeof CaptureController !== "undefined") { try { controller = new CaptureController(); opts.controller = controller; } catch (e) {} }
+    const st = await navigator.mediaDevices.getDisplayMedia(opts);
+    if (controller && controller.setFocusBehavior) { try { controller.setFocusBehavior("no-focus-change"); } catch (e) {} }
+    window.focus();
+    st.getVideoTracks().forEach(t => t.stop());
+    if (!st.getAudioTracks().length) { st.getTracks().forEach(t => t.stop()); say("音声が共有されませんでした。共有ダイアログで「音声を共有」にチェックしてください。", "No audio was shared. Tick \"Share audio\" in the sharing dialog."); return; }
+    stopSource();
+    A.stream = new MediaStream(st.getAudioTracks());
+    A.stream.getAudioTracks()[0].addEventListener("ended", () => { stopSource(); say("共有が終わりました。もう一度 START を押してください。", "Sharing ended. Press START again."); });
+    A.node = ac.createMediaStreamSource(A.stream); A.node.connect(A.analyser);   // not to the speakers: it is already playing
+    A.src = "capture"; syncUi(); say("PCの音を取り込み中。音を鳴らすと地形ができます。", "Capturing the PC's sound. Play something and the terrain grows.");
+  } catch (e) { e.name === "NotAllowedError" ? say("共有がキャンセルされました。", "Sharing was cancelled.") : say("取り込めませんでした: " + e.message, "Could not capture: " + e.message); }
+}
+const isSounding = () => !!A.ac && A.src !== "none" && A.ac.state === "running";
+const toggleShare = () => (A.src === "capture" ? (stopSource(), say("取り込みを止めました。", "Capture stopped.")) : startCapture());
+const toggleFull = () => { document.fullscreenElement ? document.exitFullscreen() : lcd.requestFullscreen && lcd.requestFullscreen(); };
+
+/* ================= keys: exactly the device's own (Fn = Shift on a computer) ================= */
+const LABEL = { BracketLeft: "[", BracketRight: "]", Backslash: "\\", Space: " ", Comma: ",", Slash: "/", Minus: "-", Equal: "=",
+                KeyB: "b", KeyR: "r", KeyV: "v", KeyH: "h", KeyM: "m", KeyO: "o", KeyA: "a" };
+function setMode(m) {
+  ui.mode = m; ui.helpOn = false; ui.airOn = false; ui.lastScreen = 0;
+  try { localStorage.setItem("ks_mode", String(m)); } catch (e) {}
+}
+function onKey(code, fn) {
+  ui.lastKeyMs = performance.now();
+  const c = LABEL[code] || "", keysMode = ui.mode === MODE_KEYS;
+  if (ui.splashOn && ui.splashIdle && !keysMode) { ui.splashOn = false; return; }   // the key that wakes the emblem only closes it
+  let acted = false, noJob = false;
+  if (fn) {
+    if (c === "m") { setMode((ui.mode + 1) % 3); acted = true; }
+    else if (keysMode && (c === "[" || c === "]")) ui.inputKana = c === "]" ? 1 : 0;
+    else if (c === "o") { ui.osWin = !ui.osWin; acted = true; }
+    else if (c === "a") { ui.groveAux = !ui.groveAux; acted = true; }
+  } else if (keysMode) acted = true;                   // on the device these go to the computer
+  else switch (c) {
+    case "[": ui.volDb = Math.max(VOL_MIN_DB, ui.volDb - 2); ui.muted = false; acted = true; break;
+    case "]": ui.volDb = Math.min(0, ui.volDb + 2); ui.muted = false; acted = true; break;
+    case "\\": ui.muted = !ui.muted; acted = true; break;
+    case " ": case ",": case "/": acted = true; break;   // play/pause, previous, next: media keys to the computer
+    case "-": case "=": ui.boostDb = Math.min(BOOST_MAX_DB, Math.max(0, ui.boostDb + (c === "=" ? BOOST_STEP_DB : -BOOST_STEP_DB))); acted = true; break;
+    case "b": ui.bassCut = !ui.bassCut; acted = true; break;
+    case "r": ui.fillMin = Infinity; ui.fillMax = 0; ui.playMs = 0; acted = true; break;
+    case "v": setMode(ui.splashOn || ui.mode === MODE_GAME ? MODE_DATA : MODE_GAME); acted = true; break;
+    case "h": ui.helpOn = ui.splashOn || !ui.helpOn; acted = true; break;
+    default: noJob = true;                               // letters, Enter, Del, Tab, ...
+  }
+  if (noJob && !keysMode) ui.helpOn = ui.splashOn || !ui.helpOn;
+  if (acted || noJob) ui.splashOn = false;
+  ui.lastScreen = 0;
+}
+const btnsFor = (code, fn) => document.querySelectorAll('button[data-code="' + code + '"]' + (fn ? '[data-fn="1"]' : ":not([data-fn])"));
+const lit = (bs, on) => bs.forEach(b => b.classList.toggle("on", on));
+const SKIP = /^(Tab|Escape|F\d+|Arrow.*|Home|End|Page.*|Meta.*|Control.*|Alt.*|Shift.*|CapsLock|ContextMenu)$/;
+addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey || SKIP.test(e.code) || e.repeat) return;
+  if (e.code === "Enter" && e.target.tagName === "BUTTON") return;
+  lit(btnsFor(e.code, e.shiftKey), true);
+  onKey(e.code, e.shiftKey);
+  if (e.code in LABEL) e.preventDefault();
+});
+addEventListener("keyup", e => {
+  document.querySelectorAll("button.on[data-code]").forEach(b => { if (b.dataset.code === e.code) b.classList.remove("on"); });
+});
+for (const box of document.querySelectorAll(".keys, .quick")) box.addEventListener("click", e => {
+  const b = e.target.closest("button[data-code]"); if (!b) return;
+  onKey(b.dataset.code, !!b.dataset.fn); b.blur();
+});
+// G0 is a button on the device, not a key: hold it here too.
+const g0 = document.querySelector('[data-hold="g0"]');
+for (const [ev, v] of [["pointerdown", true], ["pointerup", false], ["pointerleave", false], ["pointercancel", false]])
+  g0.addEventListener(ev, () => {
+    if (v && ui.mode !== MODE_KEYS) { say("G0(MOUSE画面)はキーボードモードで使います。Fn+M で切り替えてください。", "G0 (the MOUSE screen) is for keyboard mode. Switch with Fn+M."); return; }
+    ui.airOn = v; ui.lastScreen = 0;
+  });
+$("bShare").onclick = toggleShare; $("bFull").onclick = toggleFull;
+lcd.addEventListener("click", () => { if (ui.splashOn) ui.splashOn = false; });
+if (!canCapture) { $("bShare").disabled = true; say("このブラウザはPCの音の取り込みに非対応です。", "This browser cannot capture the PC's sound."); }
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+if (canCapture) say("START を押すと音の取り込みを始めます。", "Press START to begin capturing the sound.");
+document.querySelectorAll("[data-setlang]").forEach(b => b.addEventListener("click", () => setLang(b.dataset.setlang)));
+setLang(lang);
+
+/* ================= the loop: about 30 frames a second, like the device ================= */
+let rmsAcc = 0, rmsN = 0, last = 0;
+FV.init(flight, performance.now() | 0, 48000);
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (t - last < 33) return;
+  last = t;
+  const now = Math.floor(t);
+  if (!ui.since) { ui.since = ui.lastKeyMs = ui.lastSoundMs = now; showSplash(false, now); }
+
+  // Audio side: the level of the last stretch, its peak, and the newest 512 samples for the equalizer.
+  let peak = 0;
+  if (isSounding()) {
+    A.analyser.getFloatTimeDomainData(td);
+    let sq = 0; for (let i = 0; i < td.length; i++) { sq += td[i] * td[i]; const a = Math.abs(td[i]); if (a > peak) peak = a; }
+    rmsAcc += sq / td.length; rmsN++; ui.playMs += 33;
+    for (let i = 0; i < 512; i++) smp[i] = td[td.length - 512 + i] * 32767;
+  } else { rmsN++; smp.fill(0); }
+  if (peak > 0.003) ui.lastSoundMs = now;
+  meter.inPk = Math.max(meter.inPk, peak);
+  shake.peak = Math.max(shake.peak, peak * 32768);
+
+  if (ui.splashOn && !ui.splashIdle && now - ui.splashStartMs >= SPLASH_MS) ui.splashOn = false;
+  if (ui.mode === MODE_KEYS) ui.helpOn = false;
+  if (!ui.splashOn && ui.mode === MODE_DATA && now - Math.max(ui.lastKeyMs, ui.lastSoundMs) >= IDLE_MS) { ui.helpOn = false; showSplash(true, now); }
+
+  if (ui.splashOn) {
+    if (shakeService()) ui.splashDrawn = false;
+    if (!ui.splashDrawn) { drawSplash(); ui.splashDrawn = true; }
+  } else if (ui.mode === MODE_KEYS) {
+    if (now - ui.lastScreen >= 250) { ui.lastScreen = now; drawKeys(now); }
+  } else if (ui.helpOn) {
+    if (now - ui.lastScreen >= 250) { ui.lastScreen = now; drawSpeakerHelp(); }
+  } else if (ui.mode === MODE_GAME) {
+    if (!flight.ready || now - flight.lastColMs > 1000) { FV.init(flight, now, A.sr); rmsAcc = 0; rmsN = 0; }   // back from another screen
+    while (now - flight.lastColMs >= FV.COL_MS) {
+      flight.lastColMs += FV.COL_MS;
+      FV.push(flight, rmsN && rmsAcc > 0 ? Math.sqrt(rmsAcc / rmsN) * 32767 : 0);
+      rmsAcc = 0; rmsN = 0;
+    }
+    if (flight.eq) FV.analyze(flight, smp);
+    FV.update(flight, now); FV.render(flight, now);
+    // The status line shows only when something is wrong (S5-13).
+    if (ui.groveAux) drawString("AUX", 4, 2, COL_DIM);
+    else if (A.src === "none") drawString("not connected", 4, 2, COL_BAD);
+    if (ui.muted) { const l = "MUTE U0 O0"; drawString(l, 236 - textWidth(l), 2, COL_WARN); }
+  } else if (now - ui.lastScreen >= 250) { ui.lastScreen = now; drawMeasure(now); }
+  lctx.putImageData(img, 0, 0);
+}
+requestAnimationFrame(frame);

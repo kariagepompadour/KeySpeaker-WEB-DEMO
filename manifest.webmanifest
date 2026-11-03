@@ -1,0 +1,10 @@
+{
+  "name": "KeySpeaker WEB DEMO",
+  "short_name": "KeySpeaker",
+  "description": "A browser version of the KeySpeaker screens for Cardputer ADV: terrain from the sound your computer plays, with a fighter flying over it.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#101114",
+  "theme_color": "#101114",
+  "icons": [{"src":"assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
