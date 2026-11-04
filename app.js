@@ -77,12 +77,12 @@ const FV = (() => {
   /* ---- KONG (trial): a half-screen ape behind the terrain. It walks in from the right with the terrain, reaches for
      the fighter, misses (the fighter slips away) and throws a tantrum. Feet on the bottom edge, behind everything. ---- */
   const KONG_W = 23, KONG_H = 30, KW = KONG_W * DOT, KH = KONG_H * DOT;   // 69 x 90 px: the head clears all but the loudest bars
-  const K_IDLE = 0, K_WALK = 1, K_REACH = 2, K_GRAB = 3, K_MISS = 4, K_FAIL = 5, K_LEAVE = 6;
-  const K_DUR = { [K_REACH]: 0.8, [K_GRAB]: 0.22, [K_MISS]: 0.45, [K_FAIL]: 2.6 };
-  const K_SPEED = { [K_WALK]: 1, [K_REACH]: 0.6, [K_GRAB]: 0.3, [K_MISS]: 0.3, [K_FAIL]: 0.12, [K_LEAVE]: 1 };
-  const K_ARM = 26, K_START_DX = 44, K_CHASE_DX = 36, K_EVADE_PX = 17, K_HANG = 44;
-  const KONG_MS_MIN = 12000, KONG_MS_MAX = 28000;
-  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now/.test(location.search)) ? 1500 : 6000;
+  const K_IDLE = 0, K_WALK = 1, K_REACH = 2, K_GRAB = 3, K_MISS = 4, K_FAIL = 5, K_LEAVE = 6, K_THREAT = 7;
+  const K_DUR = { [K_THREAT]: 1.3, [K_REACH]: 0.8, [K_GRAB]: 0.22, [K_MISS]: 0.45, [K_FAIL]: 2.6 };
+  const K_SPEED = { [K_THREAT]: 0.4, [K_WALK]: 1, [K_REACH]: 0.6, [K_GRAB]: 0.3, [K_MISS]: 0.3, [K_FAIL]: 0.12, [K_LEAVE]: 1 };
+  const K_ARM = 26, K_START_DX = 44, K_CHASE_DX = 36, K_GAP_MIN = 1.0, K_GAP_VAR = 1.2, K_RETRY_R = 55, K_NOTICE_DX = 84, K_EVADE_PX = 17, K_HANG = 44;
+  const KONG_MS_MIN = 24000, KONG_MS_MAX = 56000;   // between two visits: about half as often as before, so it stays a treat
+  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now/.test(location.search)) ? 1500 : 10000;
   // The monster from the Space Invaders cabinet art: a black, hairy beast with horn-like ears, shoulders hunched up around a
   // small head, glowing yellow eyes (no pupils) and a red rim light on its left edge. Drawn from a silhouette (spans per row).
   const SPANS = [
@@ -112,7 +112,7 @@ const FV = (() => {
   })();
   const KC = { B: rgb(212, 38, 46), K: rgb(40, 20, 24), R: rgb(40, 20, 24), T: rgb(40, 20, 24), D: rgb(40, 20, 24), E: rgb(255, 226, 64), W: rgb(255, 255, 255),
                arm: rgb(40, 20, 24), armEdge: rgb(212, 38, 46), armShade: rgb(40, 20, 24), hand: rgb(40, 20, 24), rim: rgb(190, 34, 42), mark: rgb(255, 60, 40), spark: rgb(255, 255, 255) };
-  const newKong = () => ({ arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
+  const newKong = () => ({ noReach: false, nextAct: 0, nextAt: 0, doThreat: false, threatDone: false, threat: 0, tries: 0, maxTries: 1, arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
   const kongShoulder = k => [Math.round(k.x) + 7, H - KH + 7 * DOT + 2];       // arm toward the fighter (left)
   const kongShoulder2 = k => [Math.round(k.x) + 19 * DOT + 1, H - KH + 8 * DOT + 3];     // the other arm
   const clampReach = (sx, sy, tx, ty, r) => { const d = Math.hypot(tx - sx, ty - sy); return d <= r ? [tx, ty] : [sx + (tx - sx) * r / d, sy + (ty - sy) * r / d]; };
@@ -128,57 +128,84 @@ const FV = (() => {
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; }
+      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.tries = 0; k.nextAct = 0; k.threatDone = false;
+        // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
+        // it only bluffs (the display, no reach at all).
+        { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
+        k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12; }
       return evadeTgt;
     }
     k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
     const [shx, shy] = kongShoulder(k);
     if (k.ph === K_WALK) {
       const [s2x, s2y] = kongShoulder2(k);
-      if (!k.chase && k.x < W - KW - 6 && shx - shipCx <= K_START_DX && shx - shipCx > -10 && Math.hypot(shx - shipCx, shy - shipCy) <= 2 * K_ARM * 1.25) {   // close enough: lock on to where the fighter is and reach
-        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = 0;
-      } else if (k.chase && s2x - shipCx <= 4 && s2x - shipCx >= -K_CHASE_DX && Math.hypot(s2x - shipCx, s2y - shipCy) <= 2 * K_ARM - 1) {   // it let the fighter pass: now it reaches back after it
-        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = 1;
+      if (k.doThreat && !k.threatDone && k.x < W - KW - 6 && shx - shipCx <= K_NOTICE_DX && shx - shipCx > -10) {
+        // It has noticed the fighter: before anything else it makes itself look big (arms up, or one up and one down), once a visit.
+        k.ph = K_THREAT; k.t = 0; k.threatDone = true; k.threat = nextRandom(s) % 3; k.face = "angry";
+      } else if (!k.noReach && k.tries < k.maxTries && !k.chase && k.x < W - KW - 6 && shx - shipCx <= K_START_DX && shx - shipCx > -10 && Math.hypot(shx - shipCx, shy - shipCy) <= 2 * K_ARM * 1.25) {   // close enough: lock on to where the fighter is and reach
+        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = 0; k.tries++;
+      } else if (!k.noReach && k.tries < k.maxTries && k.chase && s2x - shipCx <= 4 && s2x - shipCx >= -K_CHASE_DX && Math.hypot(s2x - shipCx, s2y - shipCy) <= 2 * K_ARM - 1) {   // it let the fighter pass: now it reaches back after it
+        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = 1; k.tries++;
       }
+    } else if (k.ph === K_THREAT) {
+      if (k.t >= K_DUR[K_THREAT]) { k.ph = K_WALK; k.t = 0; k.face = "calm"; }
     } else if (k.ph === K_REACH && k.t >= K_DUR[K_REACH]) { k.ph = K_GRAB; k.t = 0; }
     else if (k.ph === K_GRAB) {
       evadeTgt = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;                    // the fighter slips away as the fist closes
       if (k.t >= K_DUR[K_GRAB]) { k.ph = K_MISS; k.t = 0; }
     } else if (k.ph === K_MISS) {
       evadeTgt = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;
-      if (k.t >= K_DUR[K_MISS]) { k.ph = K_LEAVE; k.t = 0; k.face = "calm"; }   // no tantrum: it just draws its arm back and walks on
+      if (k.t >= K_DUR[K_MISS]) {
+        k.ph = K_LEAVE; k.t = 0; k.face = "calm";   // no tantrum: it just draws its arm back
+        const r = nextRandom(s) % 100;                // and then, maybe: 45 % reach again, 20 % make itself big, 35 % walk on
+        k.nextAct = k.tries >= k.maxTries ? (r < 20 ? 2 : 0) : r < 45 ? 1 : r < 65 ? 2 : 0;
+        k.nextAt = K_GAP_MIN + (nextRandom(s) % 1000) / 1000 * K_GAP_VAR;
+      }   // no tantrum: it just draws its arm back and walks on
+    } else if (k.ph === K_LEAVE && k.nextAct && k.t >= k.nextAt) {
+      // After a miss it waits a moment (a second or more, never in a hurry) and then, only sometimes, does something more: reaches
+      // again if the fighter is still close (with the nearer arm: the far one if the fighter has slipped past on its right), or
+      // makes itself big once more. Often it does neither and just walks on.
+      const [s2x, s2y] = kongShoulder2(k), d1 = Math.hypot(shx - shipCx, shy - shipCy), d2 = Math.hypot(s2x - shipCx, s2y - shipCy);
+      const act = k.nextAct; k.nextAct = 0;
+      if (act === 1 && Math.min(d1, d2) <= K_RETRY_R && k.x < W - KW - 6) {
+        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = d2 < d1 ? 1 : 0; k.tries++;
+      } else if (act === 2) {
+        k.ph = K_THREAT; k.t = 0; k.threat = nextRandom(s) % 3; k.face = "angry";
+      }
     } else if (k.ph === K_FAIL && k.t >= K_DUR[K_FAIL]) { k.ph = K_LEAVE; k.t = 0; }
     if (k.x < -KW - 4) { k.ph = K_IDLE; k.nextMs = now + KONG_MS_MIN + nextRandom(s) % (KONG_MS_MAX - KONG_MS_MIN); }
     return evadeTgt;
   }
 
-  // Two-link arm from the shoulder to the hand, the elbow bent downward. Drawn as a chain of squares.
-  function drawArm(sx, sy, hx, hy, side) {
+  // Two-link arm from the shoulder to the hand, the elbow bent downward. Drawn in the same 3 x 3 px dots as the body and the other
+  // characters, on the body's own dot grid (gx, gy is where the body's grid starts), so nothing is finer than a dot.
+  function drawArm(sx, sy, hx, hy, side, gx, gy) {
     [hx, hy] = clampReach(sx, sy, hx, hy, 2 * K_ARM - 1);
     const d = Math.max(1, Math.hypot(hx - sx, hy - sy)), ux = (hx - sx) / d, uy = (hy - sy) / d, h = Math.sqrt(Math.max(0, K_ARM * K_ARM - d * d / 4));
     let nx = -uy, ny = ux; if (nx * side * 0.7 + ny * 0.7 < 0) { nx = -nx; ny = -ny; }   // elbow out and down, never toward the body
     const ex = sx + ux * d / 2 + nx * h, ey = sy + uy * d / 2 + ny * h;
-    const limb = (x0, y0, x1, y1, c, r) => {
-      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
-      for (let i = 0; i <= n; i++) { const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n); fillRect(x - r, y - r, 2 * r + 1, 2 * r + 1, c); }
+    const blk = (x, y, n, c, dx = 0) => {   // n x n dots whose middle dot sits on the grid point nearest to x, y
+      const o = DOT * (n >> 1);
+      fillRect(gx + DOT * Math.round((x - gx) / DOT) - o + dx * DOT, gy + DOT * Math.round((y - gy) / DOT) - o, n * DOT, n * DOT, c);
     };
-    const lit = true;   // both arms catch the light, the far one on its inner (left) side
-    const edge = lit ? KC.armEdge : KC.armShade;
-    limb(sx, sy, ex, ey, side > 0 ? KC.armShade : edge, 4); limb(ex, ey, hx, hy, edge, 5);   // the forearm is the thicker one; the far shoulder stays dark
-    const o = lit ? 2 : 0;                                                              // the lit arm shows red on its left side
-    limb(sx + o, sy, ex + o, ey, KC.arm, lit ? 2 : 3); limb(ex + o, ey, hx + o, hy, KC.arm, lit ? 3 : 4);
-    return [Math.round(hx), Math.round(hy), ux, uy];
+    const limb = (x0, y0, x1, y1, c, n, dx = 0) => {
+      const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / DOT));
+      for (let i = 0; i <= steps; i++) blk(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps, n, c, dx);
+    };
+    // red (the lit edge) first, then the dark core on top, shifted right so the red shows on the left; the far shoulder stays dark
+    limb(sx, sy, ex, ey, side > 0 ? KC.armShade : KC.armEdge, 3); limb(ex, ey, hx, hy, KC.armEdge, 4);   // the forearm is the thicker one
+    limb(sx, sy, ex, ey, KC.arm, 2, 1); limb(ex, ey, hx, hy, KC.arm, 3);
+    return [Math.round(hx), Math.round(hy), ux, uy, blk];
   }
-  function drawHand(x, y, ux, uy, open, lit) {
-    const edge = KC.armShade;   // the palm is the arm's own dark colour (a lit outline made it look like a separate part); the claws keep the light
-    for (const [w, h, c] of [[9, 7, edge], [7, 9, edge], [7, 5, KC.hand], [5, 7, KC.hand]]) fillRect(x - (w >> 1), y - (h >> 1), w, h, c);   // a rounded palm
-    // claws: three curved spikes along the arm's direction (spread wide when the hand is open)
-    const spread = open ? 0.8 : 0.42, len = open ? 11 : 8, a0 = Math.atan2(uy, ux);
+  function drawHand(x, y, ux, uy, open, lit, blk) {
+    blk(x, y, 3, KC.armShade);   // the palm: 3 x 3 dots in the arm's own dark colour
+    // claws: three curved spikes of one or two dots along the arm's direction (spread wide when the hand is open)
+    const spread = open ? 0.8 : 0.42, a0 = Math.atan2(uy, ux);
     for (const f of [-1, 0, 1]) {
       const a = a0 + f * spread;
-      for (let t = 4; t <= len; t++) {
-        const bend = f * 0.05 * (t - 4), cx = Math.round(x + Math.cos(a + bend) * t), cy = Math.round(y + Math.sin(a + bend) * t);
-        fillRect(cx - 1, cy - 1, t > len - 3 ? 2 : 3, t > len - 3 ? 2 : 3, lit ? KC.armEdge : KC.armShade);
+      for (const t of open ? [7, 10] : [7]) {
+        const bend = f * 0.05 * (t - 4);
+        blk(x + Math.cos(a + bend) * t, y + Math.sin(a + bend) * t, 1, lit ? KC.armEdge : KC.armShade);
       }
     }
   }
@@ -207,6 +234,12 @@ const FV = (() => {
     const pose = [null, null];                                                               // [hand x, y, open] for each arm
     for (let i = 0; i < 2; i++) {
       const [sx, sy] = sh[i], hang = air[i], d = ds[i];
+      if (k.ph === K_THREAT) {   // making itself big: 0 both arms up, 1 the near arm up and the far one down, 2 the far arm up and the near one down
+        const T = K_DUR[K_THREAT], e = ease3(Math.min(1, k.t / 0.3, (T - k.t) / 0.3)), up = k.threat === 0 || (k.threat === 1 ? i === 0 : i === 1);
+        const goal = up ? [sx + 10 * d, sy - 46] : [sx + 16 * d, sy + 34], sway = 2.5 * Math.sin(now * 0.012 + i * 1.7);
+        const h = mix(hang, [goal[0], goal[1] + sway], e);
+        pose[i] = [h[0], h[1], true]; continue;
+      }
       if (fail) { const u = (Math.sin(now * 0.016 + (i ? 1.6 : 0)) + 1) / 2; pose[i] = [sx + 10 * d - 26 * d * u, sy - 30 + 40 * u, false]; continue; }   // pounding the chest / fists in the air
       if (i === k.arm) {                                                                     // the arm that goes for the fighter
         if (reaching) {
@@ -236,18 +269,10 @@ const FV = (() => {
         if (r >= 3 && r <= 6 && c >= 8 && c <= 14) ch = face[r - 3][c - 8];
         if (r === KONG_H - 1 && walking && (frame ? c >= 11 : c <= 10)) continue;   // the lifted foot of the walk
         dot(bx + c * DOT, by + r * DOT, KC[ch]);
-        if (ch !== 'B' && !(r <= 9 && c >= 15)) {   // thin rim light (not on the right shoulder)                                                          // a thin line of light along the outer edge
-          const top = r > 0 ? KONG_BASE[r - 1][c] : '.', bot = r < KONG_H - 1 ? KONG_BASE[r + 1][c] : '.', rgt = c < KONG_W - 1 ? KONG_BASE[r][c + 1] : '.';
-          for (let q = 0; q < DOT; q++) {
-            if (rgt === '.') px(bx + c * DOT + DOT - 1, by + r * DOT + q, KC.rim);
-            if (top === '.') px(bx + c * DOT + q, by + r * DOT, KC.rim);
-            if (bot === '.') px(bx + c * DOT + q, by + r * DOT + DOT - 1, KC.rim);
-          }
-        }
       }
     }
     // both arms are drawn in the front pass
-    if (front) for (const i of [1, 0]) { const [hx, hy, open] = pose[i], a = drawArm(sh[i][0], sh[i][1], hx, hy, ds[i]); drawHand(a[0], a[1], a[2], a[3], !fail && open, true); }
+    if (front) for (const i of [1, 0]) { const [hx, hy, open] = pose[i], a = drawArm(sh[i][0], sh[i][1], hx, hy, ds[i], bx, by); drawHand(a[0], a[1], a[2], a[3], !fail && open, true, a[4]); }
     if (fail && !front) {                                                    // anger marks and sparks over the head
       const mx = bx + 18 * DOT, my = by - 8;
       if (tr) { fillRect(mx, my + 2, 7, 3, KC.mark); fillRect(mx + 2, my, 3, 7, KC.mark); }
