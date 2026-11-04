@@ -967,7 +967,7 @@ function drawSplash() {
 }
 
 /* ================= audio: the sound this computer is playing (screen / tab sharing) ================= */
-const A = { ac: null, analyser: null, sink: null, src: "none", node: null, stream: null, sr: 48000 };
+const A = { ac: null, analyser: null, sink: null, src: "none", node: null, stream: null, sr: 48000, gen: 0, pend: null };
 const td = new Float32Array(2048), smp = new Float32Array(512);
 const $ = id => document.getElementById(id);
 // Page language: English (main) or Japanese (sub). The screen itself is always English, like the device.
@@ -983,6 +983,10 @@ function setLang(l) {
   showMsg(); syncUi();
 }
 const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+const canMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);   // needs HTTPS (or localhost)
+// Every user action on a source takes a new number. A request that is still waiting (a permission prompt, a sharing dialog)
+// compares its own number with A.gen when it comes back, and drops its result if another source was chosen meanwhile.
+const claim = () => { A.pend = null; A.gen++; syncUi(); return A.gen; };
 
 function ensureAudio() {
   if (!A.ac) {
@@ -999,6 +1003,12 @@ function syncUi() {
   $("bTest").style.opacity = A.src === "test" ? "1" : "";
   $("bShare").setAttribute("aria-pressed", A.src === "capture" ? "true" : "false");
   $("shareLabel").textContent = A.src === "capture" ? (lang === "ja" ? "STOP(取り込みを止める)" : "STOP (stop capturing)") : (lang === "ja" ? "START(PCの音を取り込む)" : "START (capture the PC's sound)");
+  const ja = lang === "ja";
+  $("bMic").setAttribute("aria-pressed", A.src === "mic" ? "true" : "false");
+  $("bMic").setAttribute("aria-busy", A.pend === "mic" ? "true" : "false");
+  $("micLabel").textContent = A.src === "mic" ? (ja ? "MIC STOP(マイクを止める)" : "MIC STOP (stop the microphone)")
+    : A.pend === "mic" ? (ja ? "MIC(許可を待っています…)" : "MIC (waiting for permission…)")
+    : (ja ? "MIC START(マイクで音を取り込む)" : "MIC START (use the microphone)");
 }
 function stopSource() {
     if (A.node) { try { A.node.stop && A.node.stop(); } catch (e) {} try { A.node.disconnect(); } catch (e) {} A.node = null; }
@@ -1008,6 +1018,7 @@ function stopSource() {
 }
 async function startCapture() {
   if (!canCapture) { say("このブラウザは音の取り込みに対応していません。", "This browser cannot capture audio."); return; }
+  const gen = claim();
   const ac = ensureAudio();
   try {
     // Browsers insist on asking for video as well; it is thrown away below.
@@ -1017,6 +1028,7 @@ async function startCapture() {
     let controller = null;
     if (typeof CaptureController !== "undefined") { try { controller = new CaptureController(); opts.controller = controller; } catch (e) {} }
     const st = await navigator.mediaDevices.getDisplayMedia(opts);
+    if (gen !== A.gen) { st.getTracks().forEach(t => t.stop()); return; }   // another source was chosen while the dialog was open
     if (controller && controller.setFocusBehavior) { try { controller.setFocusBehavior("no-focus-change"); } catch (e) {} }
     window.focus();
     st.getVideoTracks().forEach(t => t.stop());
@@ -1027,8 +1039,46 @@ async function startCapture() {
     try { A.el = new Audio(); A.el.muted = true; A.el.srcObject = A.stream; A.el.play().catch(() => {}); } catch (e) {}
     A.node = ac.createMediaStreamSource(A.stream); A.node.connect(A.analyser);   // not to the speakers: it is already playing
     A.src = "capture"; syncUi(); say("PCの音を取り込み中。音を鳴らすと地形ができます。", "Capturing the PC's sound. Play something and the terrain grows.");
-  } catch (e) { e.name === "NotAllowedError" ? say("共有がキャンセルされました。", "Sharing was cancelled.") : say("取り込めませんでした: " + e.message, "Could not capture: " + e.message); }
+  } catch (e) {
+    if (gen !== A.gen) return;
+    e.name === "NotAllowedError" ? say("共有がキャンセルされました。", "Sharing was cancelled.") : say("取り込めませんでした: " + e.message, "Could not capture: " + e.message);
+  }
 }
+/* ---- microphone: the phone's main source, and a choice on a computer. Permission is asked only when the button is pressed.
+   The sound goes into the analyser only, never to the speakers (no feedback), and is not recorded or sent anywhere. ---- */
+function micFail(e) {
+  const n = e && e.name, m = (e && e.message) || n || "unknown";
+  if (n === "NotAllowedError" || n === "SecurityError") return ["マイクの使用が許可されていません。ブラウザのサイト設定でマイクを許可してから、もう一度 MIC START を押してください。",
+    "Microphone access was not allowed. Allow the microphone in the browser's site settings, then press MIC START again."];
+  if (n === "NotFoundError" || n === "OverconstrainedError") return ["マイクが見つかりません。マイクが接続・有効になっているか確認してください。", "No microphone was found. Check that one is connected and enabled."];
+  if (n === "NotReadableError" || n === "AbortError") return ["マイクを使えませんでした。ほかのアプリがマイクを使っているかもしれません。", "The microphone could not be used. Another app may be using it."];
+  return ["マイクを開始できませんでした: " + m, "Could not start the microphone: " + m];
+}
+async function startMic() {
+  if (!canMic) { say("このブラウザではマイクを使えません(HTTPS で開く必要があります)。", "The microphone is not available here (the page must be opened over HTTPS)."); return; }
+  const gen = claim();
+  const ac = ensureAudio();                    // still inside the tap: iOS Safari starts an AudioContext only from a user gesture
+  A.pend = "mic"; syncUi(); say("マイクの許可を待っています…", "Waiting for microphone permission…");
+  let st = null;
+  try {
+    // Echo cancellation, noise suppression and auto gain are asked off: they would flatten the terrain. Some phones ignore this.
+    st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+    if (gen !== A.gen) { st.getTracks().forEach(t => t.stop()); return; }   // another source was chosen while the prompt was open
+    const tr = st.getAudioTracks()[0];
+    if (!tr) { st.getTracks().forEach(t => t.stop()); A.pend = null; syncUi(); say("マイクの音声を取得できませんでした。", "No audio came from the microphone."); return; }
+    stopSource(); A.pend = null;
+    A.stream = st;
+    tr.addEventListener("ended", () => { if (A.stream !== st) return; stopSource(); say("マイクの入力が止まりました。もう一度 MIC START を押してください。", "The microphone stopped. Press MIC START again."); });
+    A.node = ac.createMediaStreamSource(st); A.node.connect(A.analyser);   // analyser only: its output gain is 0
+    A.src = "mic"; if (ac.state !== "running") ac.resume().catch(() => {});
+    syncUi(); say("マイクの音を取り込み中。音を鳴らすと地形ができます。", "Listening to the microphone. Make some sound and the terrain grows.");
+  } catch (e) {
+    if (st) st.getTracks().forEach(t => t.stop());
+    if (gen !== A.gen) return;
+    A.pend = null; syncUi(); say(...micFail(e));
+  }
+}
+const toggleMic = () => (A.src === "mic" ? (claim(), stopSource(), say("マイクを止めました。", "Microphone stopped.")) : A.pend === "mic" ? null : startMic());
 /* ---- trial: a synthetic song (kick, snare, hats, bass, arpeggio; loud and quiet bars), so the terrain, the equalizer and Kong
    can be watched without sharing any sound. It goes only into the analyser, never to the speakers. ---- */
 function makeTestSong(sr) {
@@ -1053,15 +1103,15 @@ function makeTestSong(sr) {
   return data;
 }
 function startTest() {
-  const ac = ensureAudio(); stopSource();
+  claim(); const ac = ensureAudio(); stopSource();
   const buf = ac.createBuffer(1, Math.round(ac.sampleRate * (60 / 124) * 16), ac.sampleRate); buf.copyToChannel(makeTestSong(ac.sampleRate), 0);
   const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(A.analyser); src.start();
   A.node = src; A.src = "test"; syncUi();
   say("テスト音を再生中(スピーカーからは鳴りません)。", "Playing the test song (not through the speakers).");
 }
-const toggleTest = () => (A.src === "test" ? (stopSource(), say("テスト音を止めました。", "Test sound stopped.")) : startTest());
+const toggleTest = () => (A.src === "test" ? (claim(), stopSource(), say("テスト音を止めました。", "Test sound stopped.")) : startTest());
 const isSounding = () => !!A.ac && A.src !== "none" && A.ac.state === "running";
-const toggleShare = () => (A.src === "capture" ? (stopSource(), say("取り込みを止めました。", "Capture stopped.")) : startCapture());
+const toggleShare = () => (A.src === "capture" ? (claim(), stopSource(), say("取り込みを止めました。", "Capture stopped.")) : startCapture());
 const toggleFull = () => { document.fullscreenElement ? document.exitFullscreen() : lcd.requestFullscreen && lcd.requestFullscreen(); };
 
 /* ================= keys: exactly the device's own (Fn = Shift on a computer) ================= */
@@ -1122,12 +1172,19 @@ for (const [ev, v] of [["pointerdown", true], ["pointerup", false], ["pointerlea
     if (v && ui.mode !== MODE_KEYS) { say("G0(MOUSE画面)はキーボードモードで使います。Fn+M で切り替えてください。", "G0 (the MOUSE screen) is for keyboard mode. Switch with Fn+M."); return; }
     ui.airOn = v; ui.lastScreen = 0;
   });
-$("bShare").onclick = toggleShare; $("bTest").onclick = toggleTest; $("bFull").onclick = toggleFull;
+$("bShare").onclick = toggleShare; $("bMic").onclick = toggleMic; $("bTest").onclick = toggleTest; $("bFull").onclick = toggleFull;
 lcd.addEventListener("click", () => { if (ui.splashOn) ui.splashOn = false; });
-if (!canCapture) { $("bShare").disabled = true; say("このブラウザはPCの音の取り込みに非対応です。", "This browser cannot capture the PC's sound."); }
+// Where the PC's sound cannot be captured (phones), START is hidden and MIC START is the main button.
+if (!canCapture) { $("bShare").disabled = true; $("bShare").hidden = true; }
+if (!canMic) $("bMic").disabled = true;
+// A phone may suspend the AudioContext while the page is hidden or interrupted (lock screen, a call). Wake it when the page is back.
+document.addEventListener("visibilitychange", () => { if (!document.hidden && A.ac && A.src === "mic" && A.ac.state !== "running") A.ac.resume().catch(() => {}); });
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
 
-if (canCapture) say("START を押すと音の取り込みを始めます。", "Press START to begin capturing the sound.");
+if (canCapture) say("START(PCの音)または MIC START(マイク)を押すと、音の取り込みを始めます。", "Press START (the PC's sound) or MIC START (the microphone) to begin.");
+else if (canMic) say("MIC START を押すと、マイクで音の取り込みを始めます。", "Press MIC START to listen with the microphone.");
+else say("このブラウザでは音を取り込めません。" + (window.isSecureContext === false ? "HTTPS で開いてください。" : ""),
+         "This browser cannot capture sound." + (window.isSecureContext === false ? " Open the page over HTTPS." : ""));
 document.querySelectorAll("[data-setlang]").forEach(b => b.addEventListener("click", () => setLang(b.dataset.setlang)));
 setLang(lang);
 

@@ -1,5 +1,6 @@
 :root { color-scheme: dark; --page: #101114; --ink: #e8e8ec; --dim: #8a8d96; --amber: #ffa500; --body1: #34363c; --body2: #1f2024; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; background: var(--page); color: var(--ink); }
 body { min-height: 100svh; font: 14px/1.55 -apple-system, "Hiragino Sans", "Yu Gothic", system-ui, sans-serif; }
 button { font: inherit; touch-action: manipulation; }

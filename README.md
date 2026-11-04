@@ -23,10 +23,21 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
 
 ## Audio source
 
-The sound this computer is playing, through the browser's screen / tab sharing (`getDisplayMedia`). Press **START**,
-pick the tab (or screen) that makes the sound and tick **Share audio**. Chrome / Edge on Windows can share the whole
-system's sound with "Entire screen"; on Mac and Linux share a tab. The video is discarded; the audio is only analysed in
-the browser (not played again, not uploaded). Safari, Firefox and phones' browsers cannot capture audio. Play the music in a different tab of the same browser. **Test sound** plays a synthetic song into the screen (not through the speakers), and the line under the buttons shows what the page receives. START and full screen are buttons only: the device has no such keys.
+There are two live sources, plus a test sound. Only one runs at a time: choosing one stops the others.
+
+- **START** (computers): the sound this computer is playing, through the browser's screen / tab sharing (`getDisplayMedia`).
+  Pick the tab (or screen) that makes the sound and tick **Share audio**. Chrome / Edge on Windows can share the whole
+  system's sound with "Entire screen"; on Mac and Linux share a tab. The video is discarded. Safari and Firefox cannot
+  share audio; play the music in a different tab of the same browser.
+- **MIC START** (phones, and a choice on computers): the microphone (`getUserMedia`). The browser is asked for permission
+  only when the button is pressed, and the page must be opened over HTTPS (or `localhost`). Phone browsers cannot capture
+  the sound the phone itself plays, so on a phone START is hidden and MIC START is the main button. If permission is
+  refused, allow the microphone in the browser's site settings and press the button again.
+- **Test sound** plays a synthetic song into the screen without sharing or listening to anything.
+
+In every case the audio is only analysed in the browser to drive the screen: it is never played through the speakers,
+recorded or uploaded. The line under the buttons shows what the page receives. START, MIC START and full screen are
+buttons only: the device has no such keys.
 
 ## Keys (the device's own; `Fn` is `Shift` on a computer)
 
