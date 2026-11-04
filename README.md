@@ -32,7 +32,9 @@ There are two live sources, plus a test sound. Only one runs at a time: choosing
 - **MIC START** (phones, and a choice on computers): the microphone (`getUserMedia`). The browser is asked for permission
   only when the button is pressed, and the page must be opened over HTTPS (or `localhost`). Phone browsers cannot capture
   the sound the phone itself plays, so on a phone START is hidden and MIC START is the main button. If permission is
-  refused, allow the microphone in the browser's site settings and press the button again.
+  refused, allow the microphone in the browser's site settings and press the button again. If the microphone is cut off
+  (screen lock, a call, another app), the page waits a few seconds, then stops it and asks you to press MIC START again;
+  browsers do not promise to bring a cut-off microphone back by themselves.
 - **Test sound** plays a synthetic song into the screen without sharing or listening to anything.
 
 In every case the audio is only analysed in the browser to drive the screen: it is never played through the speakers,

@@ -994,9 +994,10 @@ function ensureAudio() {
     A.analyser = ac.createAnalyser(); A.analyser.fftSize = 2048; A.analyser.smoothingTimeConstant = 0;
     A.sink = ac.createGain(); A.sink.gain.value = 0; A.analyser.connect(A.sink); A.sink.connect(ac.destination);
     A.sr = ac.sampleRate;
+    ac.addEventListener("statechange", micCheck);   // does nothing unless the microphone is the source
     FV.init(flight, performance.now() | 0, A.sr);
   }
-  if (A.ac.state === "suspended") A.ac.resume();
+  if (A.ac.state !== "running") A.ac.resume().catch(() => {});   // Safari also has "interrupted" (after a call, say), not only "suspended"
   return A.ac;
 }
 function syncUi() {
@@ -1057,26 +1058,56 @@ function micFail(e) {
 async function startMic() {
   if (!canMic) { say("このブラウザではマイクを使えません(HTTPS で開く必要があります)。", "The microphone is not available here (the page must be opened over HTTPS)."); return; }
   const gen = claim();
-  const ac = ensureAudio();                    // still inside the tap: iOS Safari starts an AudioContext only from a user gesture
   A.pend = "mic"; syncUi(); say("マイクの許可を待っています…", "Waiting for microphone permission…");
-  let st = null;
+  let st = null, node = null, committed = false;
   try {
+    const ac = ensureAudio();                  // still inside the tap, before any await: iOS Safari starts an AudioContext only from a user gesture
     // Echo cancellation, noise suppression and auto gain are asked off: they would flatten the terrain. Some phones ignore this.
     st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
     if (gen !== A.gen) { st.getTracks().forEach(t => t.stop()); return; }   // another source was chosen while the prompt was open
     const tr = st.getAudioTracks()[0];
-    if (!tr) { st.getTracks().forEach(t => t.stop()); A.pend = null; syncUi(); say("マイクの音声を取得できませんでした。", "No audio came from the microphone."); return; }
-    stopSource(); A.pend = null;
-    A.stream = st;
-    tr.addEventListener("ended", () => { if (A.stream !== st) return; stopSource(); say("マイクの入力が止まりました。もう一度 MIC START を押してください。", "The microphone stopped. Press MIC START again."); });
-    A.node = ac.createMediaStreamSource(st); A.node.connect(A.analyser);   // analyser only: its output gain is 0
-    A.src = "mic"; if (ac.state !== "running") ac.resume().catch(() => {});
-    syncUi(); say("マイクの音を取り込み中。音を鳴らすと地形ができます。", "Listening to the microphone. Make some sound and the terrain grows.");
+    if (!tr) { const e = new Error("no audio track"); e.name = "NotFoundError"; throw e; }
+    // Build everything first, without touching A: if any of this throws, the source that was running before is left as it was.
+    node = ac.createMediaStreamSource(st); node.connect(A.analyser);   // analyser only: its output gain is 0
+    // From here on nothing can throw: the old source is replaced in one step.
+    committed = true;
+    stopSource(); clearTimeout(micWatch); micPaused = false; A.pend = null;
+    A.stream = st; A.node = node; A.src = "mic";
+    tr.addEventListener("ended", () => { if (A.stream === st) micLost(); });
+    tr.addEventListener("mute", micCheck); tr.addEventListener("unmute", micCheck);
+    if (ac.state !== "running") ac.resume().catch(() => {});
+    syncUi(); micListening();
   } catch (e) {
-    if (st) st.getTracks().forEach(t => t.stop());
+    if (!committed) {                          // nothing was handed over to A: release what this attempt opened
+      try { if (node) node.disconnect(); } catch (_) {}
+      if (st) st.getTracks().forEach(t => t.stop());
+    }
     if (gen !== A.gen) return;
     A.pend = null; syncUi(); say(...micFail(e));
   }
+}
+/* ---- keeping the microphone alive: a lock screen, a call or another app can mute the track, suspend the AudioContext or end the track.
+   Browsers (iOS Safari above all) do not promise to bring these back by themselves, so a pause that lasts more than a few seconds
+   stops the source and asks for MIC START. That tap also gives iOS the user gesture it needs to restart the AudioContext. ---- */
+let micWatch = 0, micPaused = false;
+const micListening = () => say("マイクの音を取り込み中。音を鳴らすと地形ができます。", "Listening to the microphone. Make some sound and the terrain grows.");
+function micLost() {
+  clearTimeout(micWatch); micWatch = 0; micPaused = false;
+  stopSource();
+  say("マイクの入力が止まりました(画面ロック・通話・ほかのアプリの使用など)。MIC START を押して再開してください。",
+      "The microphone stopped (screen lock, a call or another app, for example). Press MIC START to restart it.");
+}
+function micCheck() {                          // called on mute / unmute / AudioContext state change / the page coming back
+  clearTimeout(micWatch); micWatch = 0;
+  if (A.src !== "mic") { micPaused = false; return; }
+  const tr = A.stream && A.stream.getAudioTracks()[0];
+  if (!tr || tr.readyState === "ended") { micLost(); return; }
+  if (A.ac.state !== "running") A.ac.resume().catch(() => {});
+  const bad = () => tr.muted || A.ac.state !== "running";
+  if (!bad()) { if (micPaused) { micPaused = false; micListening(); } return; }
+  if (!micPaused) { micPaused = true; say("マイクの入力が一時停止しています…", "The microphone input is paused…"); }
+  // Not while the page is hidden (a locked phone): the check runs again when it comes back (visibilitychange).
+  micWatch = setTimeout(() => { micWatch = 0; if (A.src !== "mic" || document.hidden) return; bad() ? micLost() : micCheck(); }, 3000);
 }
 const toggleMic = () => (A.src === "mic" ? (claim(), stopSource(), say("マイクを止めました。", "Microphone stopped.")) : A.pend === "mic" ? null : startMic());
 /* ---- trial: a synthetic song (kick, snare, hats, bass, arpeggio; loud and quiet bars), so the terrain, the equalizer and Kong
@@ -1177,8 +1208,9 @@ lcd.addEventListener("click", () => { if (ui.splashOn) ui.splashOn = false; });
 // Where the PC's sound cannot be captured (phones), START is hidden and MIC START is the main button.
 if (!canCapture) { $("bShare").disabled = true; $("bShare").hidden = true; }
 if (!canMic) $("bMic").disabled = true;
-// A phone may suspend the AudioContext while the page is hidden or interrupted (lock screen, a call). Wake it when the page is back.
-document.addEventListener("visibilitychange", () => { if (!document.hidden && A.ac && A.src === "mic" && A.ac.state !== "running") A.ac.resume().catch(() => {}); });
+// A phone may suspend the AudioContext or mute the microphone while the page is hidden or interrupted (lock screen, a call).
+// When the page is back, check; if the microphone did not come back by itself, ask for MIC START (see micCheck).
+document.addEventListener("visibilitychange", () => { if (!document.hidden) micCheck(); });
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 if (canCapture) say("START(PCの音)または MIC START(マイク)を押すと、音の取り込みを始めます。", "Press START (the PC's sound) or MIC START (the microphone) to begin.");
