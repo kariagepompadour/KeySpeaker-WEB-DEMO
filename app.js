@@ -6,7 +6,7 @@ const rgb = (r, g, b) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
 const BLACK = rgb(0, 0, 0);
 const COL_BG = BLACK, COL_FG = rgb(255, 255, 255), COL_DIM = rgb(132, 130, 132), COL_OK = rgb(0, 255, 0),
       COL_WARN = rgb(255, 255, 0), COL_BAD = rgb(255, 0, 0), COL_AMBER = rgb(255, 165, 0);
-const BUILD_TAG = "WEB-1";
+const BUILD_TAG = "WEB-2";
 
 function px(x, y, c) { if (x >= 0 && x < W && y >= 0 && y < H) fb[y * W + x] = c; }
 function fillRect(x, y, w, h, c) {
@@ -74,12 +74,168 @@ const FV = (() => {
   const enemyW = e => KINDS[e.kind].dw * DOT, enemyH = e => KINDS[e.kind].dh * DOT;
   const formed = e => e.born >= MAT_S;
 
+  /* ---- KONG (trial): a half-screen ape behind the terrain. It walks in from the right with the terrain, reaches for
+     the fighter, misses (the fighter slips away) and throws a tantrum. Feet on the bottom edge, behind everything. ---- */
+  const KONG_W = 23, KONG_H = 30, KW = KONG_W * DOT, KH = KONG_H * DOT;   // 69 x 90 px: the head clears all but the loudest bars
+  const K_IDLE = 0, K_WALK = 1, K_REACH = 2, K_GRAB = 3, K_MISS = 4, K_FAIL = 5, K_LEAVE = 6;
+  const K_DUR = { [K_REACH]: 0.8, [K_GRAB]: 0.22, [K_MISS]: 0.45, [K_FAIL]: 2.6 };
+  const K_SPEED = { [K_WALK]: 1, [K_REACH]: 0.6, [K_GRAB]: 0.3, [K_MISS]: 0.3, [K_FAIL]: 0.12, [K_LEAVE]: 1 };
+  const K_ARM = 26, K_START_DX = 44, K_EVADE_PX = 17, K_HANG = 44;
+  const KONG_MS_MIN = 12000, KONG_MS_MAX = 28000;
+  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now/.test(location.search)) ? 1500 : 6000;
+  // The monster from the Space Invaders cabinet art: a black, hairy beast with horn-like ears, shoulders hunched up around a
+  // small head, glowing yellow eyes (no pupils) and a red rim light on its left edge. Drawn from a silhouette (spans per row).
+  const SPANS = [
+    [[6, 6], [16, 16]], [[6, 7], [15, 16]], [[6, 16]], [[7, 15]], [[7, 15]],                                          // small horn ears, head
+    [[2, 20]], [[1, 21]], [[0, 22]], [[0, 22]], [[0, 22]], [[0, 22]], [[1, 21]], [[1, 21]], [[2, 20]], [[3, 19]], [[4, 18]],   // shoulders, chest
+    [[5, 17]], [[5, 17]], [[5, 17]],                                                                                  // waist
+    [[5, 17]], [[4, 10], [12, 18]], [[3, 10], [12, 19]], [[2, 9], [13, 20]], [[2, 9], [13, 20]], [[2, 9], [13, 20]],   // bow legs: thick thighs, the knees point out,
+    [[3, 9], [13, 19]], [[3, 9], [13, 19]], [[3, 9], [13, 19]], [[2, 9], [13, 20]], [[1, 9], [13, 21]],                   // the shins come back in, the big feet point out
+  ];
+  // face: 7 wide x 4 tall at columns 8-14, rows 3-6. D dark face, E glowing yellow slanted eye. No mouth, as in the original art.
+  const FACES = {
+    calm:  ["DDDDDDD", "EDDDDDE", "DEEDEED", "DDDDDDD"],
+    reach: ["DDDDDDD", "EDDDDDE", "DEEDEED", "DDDDDDD"],
+    angry: ["DDDDDDD", "EEDDDEE", "DEEDEED", "DDDDDDD"],
+  };
+  // Lit from the left, as in the original: each part has a band of red along its left edge (wide on the shoulders and chest,
+  // thin on the waist), everything else is dark. Edges toward the right and the bottom are the darkest.
+  const KONG_BASE = (() => {
+    const seg = (r, c) => r < 0 || r >= KONG_H || c < 0 || c >= KONG_W ? -1 : SPANS[r].findIndex(([a, z]) => c >= a && c <= z);
+    return Array.from({ length: KONG_H }, (_, r) => Array.from({ length: KONG_W }, (_, c) => {
+      const i = seg(r, c); if (i < 0) return ".";
+      const start = SPANS[r][i][0], w = r <= 1 ? 1 : r <= 15 ? 3 : r <= 18 ? 1 : i === 1 ? (r >= 27 ? 4 : 2) : 1;
+      if (c - start < w) return "B";
+      if (seg(r, c + 1) < 0 || seg(r + 1, c) < 0 || seg(r - 1, c) < 0) return "K";
+      return "R";
+    }));
+  })();
+  const KC = { B: rgb(212, 38, 46), K: rgb(40, 20, 24), R: rgb(40, 20, 24), T: rgb(40, 20, 24), D: rgb(40, 20, 24), E: rgb(255, 226, 64), W: rgb(255, 255, 255),
+               arm: rgb(40, 20, 24), armEdge: rgb(212, 38, 46), armShade: rgb(40, 20, 24), hand: rgb(40, 20, 24), rim: rgb(190, 34, 42), mark: rgb(255, 60, 40), spark: rgb(255, 255, 255) };
+  const newKong = () => ({ ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
+  const kongShoulder = k => [Math.round(k.x) + 7, H - KH + 7 * DOT + 2];       // arm toward the fighter (left)
+  const kongShoulder2 = k => [Math.round(k.x) + 19 * DOT + 1, H - KH + 8 * DOT + 3];     // the other arm
+  const clampReach = (sx, sy, tx, ty, r) => { const d = Math.hypot(tx - sx, ty - sy); return d <= r ? [tx, ty] : [sx + (tx - sx) * r / d, sy + (ty - sy) * r / d]; };
+  const ease3 = u => { u = Math.min(1, Math.max(0, u)); return u * u * (3 - 2 * u); };
+
+  function updateKong(s, now, dt, shipCx, shipCy) {
+    const k = s.k; k.shipCx = shipCx;
+    if (k.nextMs === 0) k.nextMs = now + kongFirstMs();
+    k.t += dt;
+    let evadeTgt = 0;
+    // it appears only while music is playing (3 s of sound; a gap of up to 2 s between notes or songs does not count as silence)
+    if (s.prevDb > DB_SILENT) { if (!k.musicSince) k.musicSince = now; k.lastMusic = now; }
+    else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
+    const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
+    if (k.ph === K_IDLE) {
+      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; }
+      return evadeTgt;
+    }
+    k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
+    const [shx, shy] = kongShoulder(k);
+    if (k.ph === K_WALK) {
+      if (k.x < W - KW - 6 && shx - shipCx <= K_START_DX && shx - shipCx > -10 && Math.hypot(shx - shipCx, shy - shipCy) <= 2 * K_ARM * 1.25) {   // close enough: lock on to where the fighter is and reach
+        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach";
+      }
+    } else if (k.ph === K_REACH && k.t >= K_DUR[K_REACH]) { k.ph = K_GRAB; k.t = 0; }
+    else if (k.ph === K_GRAB) {
+      evadeTgt = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;                    // the fighter slips away as the fist closes
+      if (k.t >= K_DUR[K_GRAB]) { k.ph = K_MISS; k.t = 0; }
+    } else if (k.ph === K_MISS) {
+      evadeTgt = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;
+      if (k.t >= K_DUR[K_MISS]) { k.ph = K_LEAVE; k.t = 0; k.face = "calm"; }   // no tantrum: it just draws its arm back and walks on
+    } else if (k.ph === K_FAIL && k.t >= K_DUR[K_FAIL]) { k.ph = K_LEAVE; k.t = 0; }
+    if (k.x < -KW - 4) { k.ph = K_IDLE; k.nextMs = now + KONG_MS_MIN + nextRandom(s) % (KONG_MS_MAX - KONG_MS_MIN); }
+    return evadeTgt;
+  }
+
+  // Two-link arm from the shoulder to the hand, the elbow bent downward. Drawn as a chain of squares.
+  function drawArm(sx, sy, hx, hy, side) {
+    [hx, hy] = clampReach(sx, sy, hx, hy, 2 * K_ARM - 1);
+    const d = Math.max(1, Math.hypot(hx - sx, hy - sy)), ux = (hx - sx) / d, uy = (hy - sy) / d, h = Math.sqrt(Math.max(0, K_ARM * K_ARM - d * d / 4));
+    let nx = -uy, ny = ux; if (nx * side * 0.7 + ny * 0.7 < 0) { nx = -nx; ny = -ny; }   // elbow out and down, never toward the body
+    const ex = sx + ux * d / 2 + nx * h, ey = sy + uy * d / 2 + ny * h;
+    const limb = (x0, y0, x1, y1, c, r) => {
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
+      for (let i = 0; i <= n; i++) { const x = Math.round(x0 + (x1 - x0) * i / n), y = Math.round(y0 + (y1 - y0) * i / n); fillRect(x - r, y - r, 2 * r + 1, 2 * r + 1, c); }
+    };
+    const lit = true;   // both arms catch the light, the far one on its inner (left) side
+    const edge = lit ? KC.armEdge : KC.armShade;
+    limb(sx, sy, ex, ey, side > 0 ? KC.armShade : edge, 4); limb(ex, ey, hx, hy, edge, 5);   // the forearm is the thicker one; the far shoulder stays dark
+    const o = lit ? 2 : 0;                                                              // the lit arm shows red on its left side
+    limb(sx + o, sy, ex + o, ey, KC.arm, lit ? 2 : 3); limb(ex + o, ey, hx + o, hy, KC.arm, lit ? 3 : 4);
+    return [Math.round(hx), Math.round(hy), ux, uy];
+  }
+  function drawHand(x, y, ux, uy, open, lit) {
+    const edge = KC.armShade;   // the palm is the arm's own dark colour (a lit outline made it look like a separate part); the claws keep the light
+    for (const [w, h, c] of [[9, 7, edge], [7, 9, edge], [7, 5, KC.hand], [5, 7, KC.hand]]) fillRect(x - (w >> 1), y - (h >> 1), w, h, c);   // a rounded palm
+    // claws: three curved spikes along the arm's direction (spread wide when the hand is open)
+    const spread = open ? 0.8 : 0.42, len = open ? 11 : 8, a0 = Math.atan2(uy, ux);
+    for (const f of [-1, 0, 1]) {
+      const a = a0 + f * spread;
+      for (let t = 4; t <= len; t++) {
+        const bend = f * 0.05 * (t - 4), cx = Math.round(x + Math.cos(a + bend) * t), cy = Math.round(y + Math.sin(a + bend) * t);
+        fillRect(cx - 1, cy - 1, t > len - 3 ? 2 : 3, t > len - 3 ? 2 : 3, lit ? KC.armEdge : KC.armShade);
+      }
+    }
+  }
+
+  function renderKong(s, now, front) {   // front = false: the body (behind the terrain); front = true: both arms (in front of everything)
+    const k = s.k;
+    if (k.ph === K_IDLE) return;
+    const fail = k.ph === K_FAIL, tr = Math.floor(now / 70) & 1;
+    // stomping tantrum: the whole body hops and shakes
+    const stomp = fail ? Math.abs(Math.sin(now * 0.012)) : 0;
+    const bx = Math.round(k.x) + (fail ? (tr ? 1 : -1) : 0), by = H - KH - Math.round(stomp * 4);
+    const frame = Math.floor(now / 330) & 1, walking = k.ph === K_WALK || k.ph === K_LEAVE;
+    const [s1x, s1y] = [bx + 7, by + 7 * DOT + 2], [s2x, s2y] = [bx + 21 * DOT, by + 7 * DOT + 2];
+    // the arm away from the fighter is behind the body
+    // while it waits (walking in, or walking off) the arms just hang, still
+    const air1 = [s1x - 4, s1y + K_HANG], air1Open = false, air2 = [s2x + 4, s2y + K_HANG], air2Open = false;
+    let h2;
+    if (fail) { const u = (Math.sin(now * 0.016 + 1.6) + 1) / 2; h2 = [s2x + 10 - 26 * u, s2y - 30 + 40 * u]; }   // pounding the chest / fist in the air
+    else h2 = air2;
+    if (front) { const a2 = drawArm(s2x, s2y, h2[0], h2[1], 1); drawHand(a2[0], a2[1], a2[2], a2[3], !fail && air2Open, true); }
+    // body
+    const face = FACES[k.face];
+    for (let r = 0; r < KONG_H && !front; r++) {
+      for (let c = 0; c < KONG_W; c++) {
+        let ch = KONG_BASE[r][c]; if (ch === '.') continue;
+        if (r >= 3 && r <= 6 && c >= 8 && c <= 14) ch = face[r - 3][c - 8];
+        if (r === KONG_H - 1 && walking && (frame ? c >= 11 : c <= 10)) continue;   // the lifted foot of the walk
+        dot(bx + c * DOT, by + r * DOT, KC[ch]);
+        if (ch !== 'B' && !(r <= 9 && c >= 15)) {   // thin rim light (not on the right shoulder)                                                          // a thin line of light along the outer edge
+          const top = r > 0 ? KONG_BASE[r - 1][c] : '.', bot = r < KONG_H - 1 ? KONG_BASE[r + 1][c] : '.', rgt = c < KONG_W - 1 ? KONG_BASE[r][c + 1] : '.';
+          for (let q = 0; q < DOT; q++) {
+            if (rgt === '.') px(bx + c * DOT + DOT - 1, by + r * DOT + q, KC.rim);
+            if (top === '.') px(bx + c * DOT + q, by + r * DOT, KC.rim);
+            if (bot === '.') px(bx + c * DOT + q, by + r * DOT + DOT - 1, KC.rim);
+          }
+        }
+      }
+    }
+    // both arms are drawn in the front pass
+    let h1, open = false;
+    if (k.ph === K_REACH) { const u = ease3(k.t / K_DUR[K_REACH]); h1 = [s1x + (k.tx - s1x) * u, s1y + (k.ty - s1y) * u]; open = true; }
+    else if (k.ph === K_GRAB || k.ph === K_MISS) { h1 = [k.tx, k.ty]; }
+    else if (fail) { const u = (Math.sin(now * 0.016) + 1) / 2; h1 = [s1x - 10 + 26 * u, s1y - 30 + 40 * u]; }
+    else if (k.ph === K_LEAVE && k.t < 0.5 && k.tx) { const u = ease3(k.t / 0.5), hx = air1[0], hy = air1[1]; h1 = [k.tx + (hx - k.tx) * u, k.ty + (hy - k.ty) * u]; }   // the arm is drawn back
+    else { h1 = air1; open = air1Open; }
+    if (k.ph === K_GRAB && k.t < K_DUR[K_GRAB] * 0.5) open = true;           // the fingers snap shut
+    if (front) { const a1 = drawArm(s1x, s1y, h1[0], h1[1], -1); drawHand(a1[0], a1[1], a1[2], a1[3], open, true); }
+    if (fail && !front) {                                                    // anger marks and sparks over the head
+      const mx = bx + 18 * DOT, my = by - 8;
+      if (tr) { fillRect(mx, my + 2, 7, 3, KC.mark); fillRect(mx + 2, my, 3, 7, KC.mark); }
+      if (!tr) { px(bx + 2 * DOT, by + 4, KC.spark); px(bx + 21 * DOT, by + 8, KC.spark); px(bx + 11 * DOT, by - 5, KC.spark); }
+    }
+  }
+
   const newEnemy = () => ({ x: 0, y: 0, baseY: 0, phase: 0, mineMs: 0, kind: WALKER, on: false, fireMs: 0, born: MAT_S });
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0,
-    e: Array.from({ length: MAX_ENEMIES }, newEnemy),
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0,
+    e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
     eb: Array.from({ length: MAX_EBULLETS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
     shieldUntil: 0, dodging: false, dodgeTo: 0,
@@ -134,7 +290,7 @@ const FV = (() => {
     s.nextFireMs = nowMs + FIRE_MS_MIN; s.avgSet = false; s.nextBombMs = nowMs + BOMB_MS_MIN / 2;
     for (const a of [s.m, s.b, s.x, s.e, s.mine, s.eb]) for (const o of a) o.on = false;
     s.shieldUntil = nowMs; s.dodging = false; s.beat = false; s.lunge = 0;
-    s.nextSpawnMs = s.nextAimMs = nowMs;
+    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0;
     s.eq = false; s.pattern = s.next = 0; s.scale = 0; s.fade = 0;
     s.modeSinceMs = s.silentSinceMs = nowMs; s.wasSilent = false; s.eqFresh = false; s.eqAvgSet = false;
     s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0);
@@ -300,7 +456,9 @@ const FV = (() => {
     if (!threat) s.dodging = false;
     if (target < TOP + 4) target = TOP + 4;
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
-    const sy = Math.round(s.shipY + bobY(now));
+    const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
+    s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
+    const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
 
     for (const m of s.m) {
       if (!m.on) continue;
@@ -465,6 +623,7 @@ const FV = (() => {
       px(x, y, c);
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
     }
+    renderKong(s, now, false);                             // the body: behind the terrain
     for (let i = 0; i < COLS; i++) {
       const x0 = colX(i, off), h = s.h[i];
       for (let dx = 0; dx < BAR_W; dx++) {
@@ -518,7 +677,7 @@ const FV = (() => {
     }
     for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
 
-    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now));
+    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
     for (let y = 0; y < SHIP_DH; y++)
       for (let x = 0; x < SHIP_DW; x++) {
         const c = SHIP[y][x]; if (c === '.') continue;
@@ -532,6 +691,7 @@ const FV = (() => {
     }
     dot(sx - DOT, sy + 2 * DOT, C.F2);
     if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
+    renderKong(s, now, true);                              // both arms: in front of the terrain, the equalizer and the fighter
   }
 
   return { newState, init, push, analyze, update, render, COL_MS, DB_SILENT, MODE_MS, EQ_BANDS };
@@ -836,11 +996,13 @@ function ensureAudio() {
   return A.ac;
 }
 function syncUi() {
+  $("bTest").style.opacity = A.src === "test" ? "1" : "";
   $("bShare").setAttribute("aria-pressed", A.src === "capture" ? "true" : "false");
   $("shareLabel").textContent = A.src === "capture" ? (lang === "ja" ? "STOP(取り込みを止める)" : "STOP (stop capturing)") : (lang === "ja" ? "START(PCの音を取り込む)" : "START (capture the PC's sound)");
 }
 function stopSource() {
     if (A.node) { try { A.node.stop && A.node.stop(); } catch (e) {} try { A.node.disconnect(); } catch (e) {} A.node = null; }
+  if (A.el) { try { A.el.srcObject = null; } catch (e) {} A.el = null; }
   if (A.stream) { A.stream.getTracks().forEach(t => t.stop()); A.stream = null; }
   A.src = "none"; syncUi();
 }
@@ -862,10 +1024,42 @@ async function startCapture() {
     stopSource();
     A.stream = new MediaStream(st.getAudioTracks());
     A.stream.getAudioTracks()[0].addEventListener("ended", () => { stopSource(); say("共有が終わりました。もう一度 START を押してください。", "Sharing ended. Press START again."); });
+    try { A.el = new Audio(); A.el.muted = true; A.el.srcObject = A.stream; A.el.play().catch(() => {}); } catch (e) {}
     A.node = ac.createMediaStreamSource(A.stream); A.node.connect(A.analyser);   // not to the speakers: it is already playing
     A.src = "capture"; syncUi(); say("PCの音を取り込み中。音を鳴らすと地形ができます。", "Capturing the PC's sound. Play something and the terrain grows.");
   } catch (e) { e.name === "NotAllowedError" ? say("共有がキャンセルされました。", "Sharing was cancelled.") : say("取り込めませんでした: " + e.message, "Could not capture: " + e.message); }
 }
+/* ---- trial: a synthetic song (kick, snare, hats, bass, arpeggio; loud and quiet bars), so the terrain, the equalizer and Kong
+   can be watched without sharing any sound. It goes only into the analyser, never to the speakers. ---- */
+function makeTestSong(sr) {
+  const bpm = 124, beat = 60 / bpm, bars = 4, n = Math.round(sr * beat * 4 * bars), data = new Float32Array(n);
+  const SCALE = [0, 3, 5, 7, 10, 12, 15, 17], ROOT = 55, lvl = [1, 1, 0.55, 0.9];  // bar loudness: a swell and a drop
+  let seed = 12345; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+  let kp = 0, bp = 0, lp = 0, hn = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, b = t / beat, bi = Math.floor(b), tb = (b - bi) * beat, bar = Math.floor(bi / 4) % bars, g = lvl[bar];
+    let v = 0;
+    if (bar !== 2 || (bi % 4 === 0)) { kp += 2 * Math.PI * (45 + 110 * Math.exp(-tb * 28)) / sr; v += Math.sin(kp) * Math.exp(-tb * 7) * 0.9; }   // kick
+    if (bi % 4 === 1 || bi % 4 === 3) v += rnd() * Math.exp(-tb * 16) * 0.35;                                                                        // snare
+    const th = (b * 2 % 1) * beat / 2, nz = rnd(); v += (nz - hn) * Math.exp(-th * 70) * 0.12; hn = nz;                                           // hats
+    const note = [0, 0, 7, 5][bi % 4], f = ROOT * Math.pow(2, note / 12);                                                                           // bass
+    bp += f / sr; v += ((bp % 1) * 2 - 1) * 0.18 * Math.exp(-tb * 2.2) * g;
+    const e8 = Math.floor(b * 2), te = ((b * 2) % 1) * beat / 2, lf = ROOT * 4 * Math.pow(2, SCALE[(e8 * 3 + bar * 2) % SCALE.length] / 12);         // arpeggio
+    lp += lf / sr; v += (Math.sin(2 * Math.PI * lp) + 0.4 * Math.sin(4 * Math.PI * lp)) * 0.10 * Math.exp(-te * 9) * (bar === 1 ? 1.4 : 1);
+    data[i] = v * (0.45 + 0.55 * g);
+  }
+  let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(data[i]));
+  for (let i = 0; i < n; i++) data[i] *= 0.8 / pk;
+  return data;
+}
+function startTest() {
+  const ac = ensureAudio(); stopSource();
+  const buf = ac.createBuffer(1, Math.round(ac.sampleRate * (60 / 124) * 16), ac.sampleRate); buf.copyToChannel(makeTestSong(ac.sampleRate), 0);
+  const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(A.analyser); src.start();
+  A.node = src; A.src = "test"; syncUi();
+  say("テスト音を再生中(スピーカーからは鳴りません)。", "Playing the test song (not through the speakers).");
+}
+const toggleTest = () => (A.src === "test" ? (stopSource(), say("テスト音を止めました。", "Test sound stopped.")) : startTest());
 const isSounding = () => !!A.ac && A.src !== "none" && A.ac.state === "running";
 const toggleShare = () => (A.src === "capture" ? (stopSource(), say("取り込みを止めました。", "Capture stopped.")) : startCapture());
 const toggleFull = () => { document.fullscreenElement ? document.exitFullscreen() : lcd.requestFullscreen && lcd.requestFullscreen(); };
@@ -928,7 +1122,7 @@ for (const [ev, v] of [["pointerdown", true], ["pointerup", false], ["pointerlea
     if (v && ui.mode !== MODE_KEYS) { say("G0(MOUSE画面)はキーボードモードで使います。Fn+M で切り替えてください。", "G0 (the MOUSE screen) is for keyboard mode. Switch with Fn+M."); return; }
     ui.airOn = v; ui.lastScreen = 0;
   });
-$("bShare").onclick = toggleShare; $("bFull").onclick = toggleFull;
+$("bShare").onclick = toggleShare; $("bTest").onclick = toggleTest; $("bFull").onclick = toggleFull;
 lcd.addEventListener("click", () => { if (ui.splashOn) ui.splashOn = false; });
 if (!canCapture) { $("bShare").disabled = true; say("このブラウザはPCの音の取り込みに非対応です。", "This browser cannot capture the PC's sound."); }
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -957,6 +1151,10 @@ function frame(t) {
   } else { rmsN++; smp.fill(0); }
   if (peak > 0.003) ui.lastSoundMs = now;
   meter.inPk = Math.max(meter.inPk, peak);
+  if (now - (ui.dbgAt || 0) > 250) {                                  // trial: a diagnostics line under the buttons
+    ui.dbgAt = now; const tr = A.stream && A.stream.getAudioTracks()[0], el = $("dbg");
+    if (el) el.textContent = "src=" + A.src + "  ctx=" + (A.ac ? A.ac.state : "none") + "  track=" + (tr ? tr.readyState + (tr.muted ? "/muted" : "") : "-") + "  level=" + (peak > 0 ? (20 * Math.log10(peak)).toFixed(0) + " dB" : "silent");
+  }
   shake.peak = Math.max(shake.peak, peak * 32768);
 
   if (ui.splashOn && !ui.splashIdle && now - ui.splashStartMs >= SPLASH_MS) ui.splashOn = false;

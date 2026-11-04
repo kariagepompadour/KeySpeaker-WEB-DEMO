@@ -20,8 +20,10 @@
     <button class="power" id="bShare" aria-pressed="false"><span></span><b id="shareLabel">START</b></button>
     <button class="btn" data-code="KeyM" data-fn="1"><b class="kk">Fn+M</b> <span lang="en">Next mode</span><span lang="ja">次のモード</span></button>
     <button class="btn" data-code="KeyH"><b class="kk">h</b> <span lang="en">Help</span><span lang="ja">ヘルプ</span></button>
+    <button class="btn" id="bTest">♪ <span lang="en">Test sound</span><span lang="ja">テスト音</span></button>
     <button class="btn" id="bFull">⛶ <span lang="en">Full screen</span><span lang="ja">全画面</span></button>
     <div id="msg"></div>
+    <div id="dbg" style="width:100%;text-align:center;font:12px/1.4 ui-monospace,Menlo,monospace;opacity:.75"></div>
   </div>
 
   <section class="device" id="device" aria-label="KeySpeaker screen">
@@ -43,6 +45,8 @@
     <ul class="notes">
       <li><span lang="en">Chrome / Edge: on Windows, "Entire screen" captures the whole system's sound; on Mac / Linux, share a "Tab".</span><span lang="ja">Chrome / Edge: Windows は「画面全体」で PC 全体の音、Mac / Linux は「タブ」の音を取り込めます。</span></li>
       <li><span lang="en">The video is discarded. The sound is only analysed to drive the screen: it is not played again or sent anywhere (the source keeps playing as before).</span><span lang="ja">映像は使わず捨てます。音は画面に反応するためだけに解析し、再生も送信もしません(取り込み元の音はそのまま鳴ります)。</span></li>
+      <li><span lang="en">Safari and Firefox cannot share audio, so use Chrome or Edge. Play the music in a different tab of that same browser.</span><span lang="ja">Safari と Firefox は音を共有できません。Chrome か Edge を使い、音楽は同じブラウザの別のタブで鳴らしてください。</span></li>
+      <li><span lang="en"><b>Test sound</b> plays a synthetic song into the screen (nothing is played through the speakers), so you can see it without sharing any sound. The line under the buttons shows what the page receives.</span><span lang="ja"><b>テスト音</b>は合成した曲を画面に流します(スピーカーからは鳴りません)。音を共有しなくても動きが見られます。ボタンの下の1行は、ページが受け取っている音の状態です。</span></li>
       <li><span lang="en">Phone browsers cannot capture audio.</span><span lang="ja">スマホのブラウザは音の取り込みに対応していません。</span></li>
       <li><span lang="en">START and Full screen are buttons for this web version only, not device keys.</span><span lang="ja">START と全画面はWEB版だけのボタンです。実機のキーではありません。</span></li>
     </ul>

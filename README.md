@@ -13,6 +13,8 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
 - **Measure mode**: the measurement screen. Buffer, counters and PC volume are demo values; the levels follow the sound.
 - **Flight mode**: the sound's level builds the terrain, a fighter flies over it, shoots targets and bombs craters; the
   30-band equalizer comes and goes by itself (every minute or after a gap between songs).
+  While music plays, a space monster (the beast from the Space Invaders cabinet art) now and then walks in behind the
+  terrain and reaches for the fighter with a clawed hand, drawn in front of everything, and misses.
 - **Keyboard (text input) mode**: the spinning Earth with "KEY BOARD", Mac/Win and A/あ, the cheat sheet, and the
   MOUSE screen while G0 is held.
 - **Help screen**, with the device's own key list.
@@ -24,7 +26,7 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
 The sound this computer is playing, through the browser's screen / tab sharing (`getDisplayMedia`). Press **START**,
 pick the tab (or screen) that makes the sound and tick **Share audio**. Chrome / Edge on Windows can share the whole
 system's sound with "Entire screen"; on Mac and Linux share a tab. The video is discarded; the audio is only analysed in
-the browser (not played again, not uploaded). Phones' browsers cannot capture audio. START and full screen are buttons only: the device has no such keys.
+the browser (not played again, not uploaded). Safari, Firefox and phones' browsers cannot capture audio. Play the music in a different tab of the same browser. **Test sound** plays a synthetic song into the screen (not through the speakers), and the line under the buttons shows what the page receives. START and full screen are buttons only: the device has no such keys.
 
 ## Keys (the device's own; `Fn` is `Shift` on a computer)
 
