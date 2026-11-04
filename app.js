@@ -80,7 +80,7 @@ const FV = (() => {
   const K_IDLE = 0, K_WALK = 1, K_REACH = 2, K_GRAB = 3, K_MISS = 4, K_FAIL = 5, K_LEAVE = 6;
   const K_DUR = { [K_REACH]: 0.8, [K_GRAB]: 0.22, [K_MISS]: 0.45, [K_FAIL]: 2.6 };
   const K_SPEED = { [K_WALK]: 1, [K_REACH]: 0.6, [K_GRAB]: 0.3, [K_MISS]: 0.3, [K_FAIL]: 0.12, [K_LEAVE]: 1 };
-  const K_ARM = 26, K_START_DX = 44, K_EVADE_PX = 17, K_HANG = 44;
+  const K_ARM = 26, K_START_DX = 44, K_CHASE_DX = 36, K_EVADE_PX = 17, K_HANG = 44;
   const KONG_MS_MIN = 12000, KONG_MS_MAX = 28000;
   const kongFirstMs = () => (typeof location !== "undefined" && /kong=now/.test(location.search)) ? 1500 : 6000;
   // The monster from the Space Invaders cabinet art: a black, hairy beast with horn-like ears, shoulders hunched up around a
@@ -112,7 +112,7 @@ const FV = (() => {
   })();
   const KC = { B: rgb(212, 38, 46), K: rgb(40, 20, 24), R: rgb(40, 20, 24), T: rgb(40, 20, 24), D: rgb(40, 20, 24), E: rgb(255, 226, 64), W: rgb(255, 255, 255),
                arm: rgb(40, 20, 24), armEdge: rgb(212, 38, 46), armShade: rgb(40, 20, 24), hand: rgb(40, 20, 24), rim: rgb(190, 34, 42), mark: rgb(255, 60, 40), spark: rgb(255, 255, 255) };
-  const newKong = () => ({ ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
+  const newKong = () => ({ arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
   const kongShoulder = k => [Math.round(k.x) + 7, H - KH + 7 * DOT + 2];       // arm toward the fighter (left)
   const kongShoulder2 = k => [Math.round(k.x) + 19 * DOT + 1, H - KH + 8 * DOT + 3];     // the other arm
   const clampReach = (sx, sy, tx, ty, r) => { const d = Math.hypot(tx - sx, ty - sy); return d <= r ? [tx, ty] : [sx + (tx - sx) * r / d, sy + (ty - sy) * r / d]; };
@@ -128,14 +128,17 @@ const FV = (() => {
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; }
+      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; }
       return evadeTgt;
     }
     k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
     const [shx, shy] = kongShoulder(k);
     if (k.ph === K_WALK) {
-      if (k.x < W - KW - 6 && shx - shipCx <= K_START_DX && shx - shipCx > -10 && Math.hypot(shx - shipCx, shy - shipCy) <= 2 * K_ARM * 1.25) {   // close enough: lock on to where the fighter is and reach
-        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach";
+      const [s2x, s2y] = kongShoulder2(k);
+      if (!k.chase && k.x < W - KW - 6 && shx - shipCx <= K_START_DX && shx - shipCx > -10 && Math.hypot(shx - shipCx, shy - shipCy) <= 2 * K_ARM * 1.25) {   // close enough: lock on to where the fighter is and reach
+        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = 0;
+      } else if (k.chase && s2x - shipCx <= 4 && s2x - shipCx >= -K_CHASE_DX && Math.hypot(s2x - shipCx, s2y - shipCy) <= 2 * K_ARM - 1) {   // it let the fighter pass: now it reaches back after it
+        k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.style = nextRandom(s) % 4; k.arm = 1;
       }
     } else if (k.ph === K_REACH && k.t >= K_DUR[K_REACH]) { k.ph = K_GRAB; k.t = 0; }
     else if (k.ph === K_GRAB) {
@@ -189,13 +192,42 @@ const FV = (() => {
     const bx = Math.round(k.x) + (fail ? (tr ? 1 : -1) : 0), by = H - KH - Math.round(stomp * 4);
     const frame = Math.floor(now / 330) & 1, walking = k.ph === K_WALK || k.ph === K_LEAVE;
     const [s1x, s1y] = [bx + 7, by + 7 * DOT + 2], [s2x, s2y] = [bx + 21 * DOT, by + 7 * DOT + 2];
-    // the arm away from the fighter is behind the body
     // while it waits (walking in, or walking off) the arms just hang, still
-    const air1 = [s1x - 4, s1y + K_HANG], air1Open = false, air2 = [s2x + 4, s2y + K_HANG], air2Open = false;
-    let h2;
-    if (fail) { const u = (Math.sin(now * 0.016 + 1.6) + 1) / 2; h2 = [s2x + 10 - 26 * u, s2y - 30 + 40 * u]; }   // pounding the chest / fist in the air
-    else h2 = air2;
-    if (front) { const a2 = drawArm(s2x, s2y, h2[0], h2[1], 1); drawHand(a2[0], a2[1], a2[2], a2[3], !fail && air2Open, true); }
+    const air = [[s1x - 4, s1y + K_HANG], [s2x + 4, s2y + K_HANG]], sh = [[s1x, s1y], [s2x, s2y]], ds = [-1, 1];
+    // Each time the monster reaches, one arm (k.arm: 0 the near one, 1 the far one, which catches the fighter as the monster walks
+    // past it) comes at the fighter from a different side (k.style, drawn by lot when it starts):
+    //   0 from the right, straight in   1 from above, an overhand smash   2 from below, an underhand scoop
+    //   3 from the left, swinging past the fighter and hooking back
+    // and the other arm helps with a pose of its own (st): 1 claws too, 2 pounds its chest, 4 stays down, 3 goes high and smashes down.
+    const mix = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+    const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS, pound = (Math.sin(now * 0.02) + 1) / 2, st = [1, 2, 4, 3][k.style];
+    const at = [k.tx, k.ty], wp = [null, [k.tx + 6, k.ty - 36], [k.tx + 4, k.ty + 36], [k.tx - 8, k.ty - 6]][k.style];
+    const uR = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : 1, snap = k.ph === K_GRAB ? ease3(k.t / K_DUR[K_GRAB]) : k.ph === K_MISS ? 1 : 0;
+    const fistOpen = k.ph === K_REACH || (k.ph === K_GRAB && k.t < K_DUR[K_GRAB] * 0.5);   // the fingers snap shut
+    const pose = [null, null];                                                               // [hand x, y, open] for each arm
+    for (let i = 0; i < 2; i++) {
+      const [sx, sy] = sh[i], hang = air[i], d = ds[i];
+      if (fail) { const u = (Math.sin(now * 0.016 + (i ? 1.6 : 0)) + 1) / 2; pose[i] = [sx + 10 * d - 26 * d * u, sy - 30 + 40 * u, false]; continue; }   // pounding the chest / fists in the air
+      if (i === k.arm) {                                                                     // the arm that goes for the fighter
+        if (reaching) {
+          const h = k.ph === K_REACH ? (wp ? mix(hang, wp, uR) : mix([sx, sy], at, uR)) : (k.ph === K_GRAB && wp ? mix(wp, at, snap) : at);
+          pose[i] = [h[0], h[1], fistOpen];
+        } else if (k.ph === K_LEAVE && k.t < 0.5 && k.tx) pose[i] = [...mix(at, hang, ease3(k.t / 0.5)), false];   // the arm is drawn back
+        else pose[i] = [hang[0], hang[1], false];
+      } else {                                                                               // the other arm
+        const fx = [k.tx + 10 * d, k.ty - 8], up = [sx + 2 * d, sy - 34];
+        if (reaching) {
+          let h = hang, open = false;
+          if (st === 1) { h = k.ph === K_REACH ? mix(hang, fx, ease3((k.t - 0.12) / (K_DUR[K_REACH] - 0.12))) : fx; open = fistOpen; }
+          else if (st === 2) { h = [sx - d * (16 + 6 * pound), sy + 12 + 5 * pound]; if (uR < 1) h = mix(hang, h, uR); }
+          else if (st === 3) { h = k.ph === K_REACH ? mix(hang, up, uR) : mix(up, fx, snap); open = k.ph === K_REACH; }
+          pose[i] = [h[0], h[1], open];
+        } else if (k.ph === K_LEAVE && k.t < 0.5 && k.tx && st !== 4) {
+          const h = mix(st === 1 || st === 3 ? fx : [sx - d * 19, sy + 14], hang, ease3(k.t / 0.5));
+          pose[i] = [h[0], h[1], false];
+        } else pose[i] = [hang[0], hang[1], false];
+      }
+    }
     // body
     const face = FACES[k.face];
     for (let r = 0; r < KONG_H && !front; r++) {
@@ -215,14 +247,7 @@ const FV = (() => {
       }
     }
     // both arms are drawn in the front pass
-    let h1, open = false;
-    if (k.ph === K_REACH) { const u = ease3(k.t / K_DUR[K_REACH]); h1 = [s1x + (k.tx - s1x) * u, s1y + (k.ty - s1y) * u]; open = true; }
-    else if (k.ph === K_GRAB || k.ph === K_MISS) { h1 = [k.tx, k.ty]; }
-    else if (fail) { const u = (Math.sin(now * 0.016) + 1) / 2; h1 = [s1x - 10 + 26 * u, s1y - 30 + 40 * u]; }
-    else if (k.ph === K_LEAVE && k.t < 0.5 && k.tx) { const u = ease3(k.t / 0.5), hx = air1[0], hy = air1[1]; h1 = [k.tx + (hx - k.tx) * u, k.ty + (hy - k.ty) * u]; }   // the arm is drawn back
-    else { h1 = air1; open = air1Open; }
-    if (k.ph === K_GRAB && k.t < K_DUR[K_GRAB] * 0.5) open = true;           // the fingers snap shut
-    if (front) { const a1 = drawArm(s1x, s1y, h1[0], h1[1], -1); drawHand(a1[0], a1[1], a1[2], a1[3], open, true); }
+    if (front) for (const i of [1, 0]) { const [hx, hy, open] = pose[i], a = drawArm(sh[i][0], sh[i][1], hx, hy, ds[i]); drawHand(a[0], a[1], a[2], a[3], !fail && open, true); }
     if (fail && !front) {                                                    // anger marks and sparks over the head
       const mx = bx + 18 * DOT, my = by - 8;
       if (tr) { fillRect(mx, my + 2, 7, 3, KC.mark); fillRect(mx + 2, my, 3, 7, KC.mark); }
