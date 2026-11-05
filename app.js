@@ -110,9 +110,23 @@ const FV = (() => {
       return "R";
     }));
   })();
-  const KC = { B: rgb(212, 38, 46), K: rgb(40, 20, 24), R: rgb(40, 20, 24), T: rgb(40, 20, 24), D: rgb(40, 20, 24), E: rgb(255, 226, 64), W: rgb(255, 255, 255),
+  let KC = { B: rgb(212, 38, 46), K: rgb(40, 20, 24), R: rgb(40, 20, 24), T: rgb(40, 20, 24), D: rgb(40, 20, 24), E: rgb(255, 226, 64), W: rgb(255, 255, 255),
                arm: rgb(40, 20, 24), armEdge: rgb(212, 38, 46), armShade: rgb(40, 20, 24), hand: rgb(40, 20, 24), rim: rgb(190, 34, 42), mark: rgb(255, 60, 40), spark: rgb(255, 255, 255) };
-  const newKong = () => ({ noReach: false, nextAct: 0, nextAt: 0, doThreat: false, threatDone: false, threat: 0, tries: 0, maxTries: 1, arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
+  // Colour variants (S9-3): the same monster in six colours. Each visit draws one by lot (weights below); a palette is only three
+  // colours, the lit edge, the dark body and the eyes, so the arms follow too. Eyes are chosen to stand out from the body.
+  const PALS = [
+    { lit: rgb(212, 38, 46), dark: rgb(40, 20, 24), eye: rgb(255, 226, 64) },    // 0 red, the original
+    { lit: rgb(70, 120, 235), dark: rgb(16, 22, 46), eye: rgb(120, 255, 255) },  // 1 blue
+    { lit: rgb(60, 190, 84), dark: rgb(14, 34, 20), eye: rgb(255, 90, 60) },     // 2 green
+    { lit: rgb(176, 76, 224), dark: rgb(34, 16, 44), eye: rgb(120, 255, 160) },  // 3 purple
+    { lit: rgb(240, 192, 56), dark: rgb(54, 38, 10), eye: rgb(255, 255, 255) },  // 4 gold, rare
+    { lit: rgb(222, 232, 255), dark: rgb(38, 42, 62), eye: rgb(255, 60, 90) },   // 5 ghost white
+  ];
+  const PAL_PERCENT = [30, 16, 16, 16, 10, 12];   // how often each comes (sums to 100)
+  const KCS = PALS.map(p => ({ ...KC, B: p.lit, K: p.dark, R: p.dark, T: p.dark, D: p.dark, E: p.eye, arm: p.dark, armEdge: p.lit, armShade: p.dark, hand: p.dark }));
+  const pickPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < PAL_PERCENT.length - 1 && r >= PAL_PERCENT[i]) r -= PAL_PERCENT[i++]; return i; };
+
+  const newKong = () => ({ pal: 0, noReach: false, nextAct: 0, nextAt: 0, doThreat: false, threatDone: false, threat: 0, tries: 0, maxTries: 1, arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
   const kongShoulder = k => [Math.round(k.x) + 7, H - KH + 7 * DOT + 2];       // arm toward the fighter (left)
   const kongShoulder2 = k => [Math.round(k.x) + 19 * DOT + 1, H - KH + 8 * DOT + 3];     // the other arm
   const clampReach = (sx, sy, tx, ty, r) => { const d = Math.hypot(tx - sx, ty - sy); return d <= r ? [tx, ty] : [sx + (tx - sx) * r / d, sy + (ty - sy) * r / d]; };
@@ -128,7 +142,7 @@ const FV = (() => {
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.tries = 0; k.nextAct = 0; k.threatDone = false;
+      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
         // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
         // it only bluffs (the display, no reach at all).
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
@@ -212,6 +226,7 @@ const FV = (() => {
 
   function renderKong(s, now, front) {   // front = false: the body (behind the terrain); front = true: both arms (in front of everything)
     const k = s.k;
+    KC = KCS[k.pal] || KCS[0];
     if (k.ph === K_IDLE) return;
     const fail = k.ph === K_FAIL, tr = Math.floor(now / 70) & 1;
     // stomping tantrum: the whole body hops and shakes
