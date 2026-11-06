@@ -315,11 +315,11 @@ const FV = (() => {
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   const SQ_SC = [
-    { 0: { d1: [-23, -2], d2: [-12, -3], o: [-3, -3] }, 4: { d1: [23, 12], d2: [8, 6], o: [9, 5] } },   // over its head: one tentacle high, the other lower (never a symmetric "hooray")
-    { 0: { d1: [-11, 7], d2: [0, 3], o: [6, 0] }, 1: { d1: [-9, 11], d2: [2, 4], o: [2, 4] } },
-    { 4: { d1: [11, 0], d2: [0, -3], o: [-3, -4] }, 3: { d1: [7, 15], d2: [-2.4, 5], o: [-4.6, 3] } },
+    { 0: { d1: [-18, -4], d2: [-3, 5], o: [-15, -3] }, 4: { d1: [13, 1], d2: [-6, -4], o: [19, 27] } },   // fighter above it: one tentacle up beside the head, the other low and out to the side, like "Shay!" (never meeting, never a ring)
+    { 0: { d1: [-8, 5], d2: [6, 0], o: [-2, 0] }, 1: { d1: [-8, 9], d2: [6, -2], o: [-3, 3] } },
+    { 4: { d1: [8, 5], d2: [-6, 0], o: [2, 0] }, 3: { d1: [8, 9], d2: [-6, -2], o: [3, 3] } },
   ];
-  const SQ_OVER_FLIP = { 0: { d1: [-23, 12], d2: [-8, 6], o: [-9, 5] }, 4: { d1: [23, -2], d2: [12, -3], o: [3, -3] } };   // the same, the other way round
+  const SQ_OVER_FLIP = { 0: { d1: [-13, 1], d2: [6, -4], o: [-19, 27] }, 4: { d1: [18, -4], d2: [3, 5], o: [15, -3] } };   // the same, the other way round
   const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
   const squidTop = now => H - KH - 4 + Math.round(Math.sin(now * 0.003) * 3);   // it floats: a slow bob
@@ -364,8 +364,9 @@ const FV = (() => {
     const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
     for (let i = 0; i <= steps; i++) {
       const u = i / steps, [x, y] = bez3(p, u), w = u < 0.35 ? 4 : u < 0.7 ? 3 : 2;
+      const [x1, y1] = bez3(p, Math.min(1, u + 0.02)), [x0, y0] = bez3(p, Math.max(0, u - 0.02)), flat = Math.abs(x1 - x0) > Math.abs(y1 - y0);   // going sideways: the thickness is across, in y
       const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
-      for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm);
+      for (let j = w - 1; j >= 0; j--) { const o = (j - (w >> 1)) * DOT; dot(flat ? cx : cx + o, flat ? cy + o : cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm); }
     }
   }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, in front of everything
@@ -374,14 +375,13 @@ const FV = (() => {
     const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
     const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
     const w = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : reaching ? 1 : k.ph === K_LEAVE && k.tx ? 1 - ease3(k.t / 0.5) : 0;   // 0 at rest ... 1 stretched out
-    const ringScale = k.ph === K_GRAB ? 0.5 - 0.4 * ease3(k.t / K_DUR[K_GRAB]) : k.ph === K_MISS ? 0.1 : 0.5;   // how far from the fighter the tips stay: they come down onto it in the strike
-    for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 5; i++) {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
       const a = SQ_ANG[i] * Math.PI / 180, L = SQ_LEN[i], R0 = [nx + SQ_ROOT[i] * DOT, ny], p2 = [R0[0] + L * Math.sin(a) * DOT, R0[1] + L * Math.cos(a) * DOT];
       let p = [R0, [R0[0] + (L * 0.35 * Math.sin(a) + SQ_ROOT[i] * 0.15) * DOT, R0[1] + L * 0.4 * DOT], [p2[0] + Math.sin(a) * 3 * DOT, p2[1] - L * 0.35 * DOT], p2];   // at rest: hanging, fanned
       if (moving) {
-        const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * ringScale * DOT, T[1] + sc.o[1] * ringScale * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
+        const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * DOT, T[1] + sc.o[1] * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
         p = p.map((v, n) => [v[0] + (r[n][0] - v[0]) * w, v[1] + (r[n][1] - v[1]) * w]);
       }
