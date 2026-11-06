@@ -342,7 +342,8 @@ const FV = (() => {
     k.sc = squidPick((shipCx - nx) / DOT, (shipCy - ny) / DOT);
     const dxd = (shipCx - nx) / DOT;
     k.flip = Math.abs(dxd) < 4 ? nextRandom(s) % 2 : dxd < 0 ? 0 : 1;   // fighter above: the tentacles go up the side it is on
-    k.legs = Object.keys(k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc]).map(Number);
+    const aimLeft = k.sc === 1 || (k.sc === 0 && !k.flip);   // the fighter's side: the left pair or the right pair
+    k.legs = nextRandom(s) % 100 < 40 ? (aimLeft ? [0, 1, 6, 5] : [6, 5, 0, 1]) : (aimLeft ? [0, 1] : [6, 5]);   // only 4 in 10 reaches use both sides; often only the fighter's side stretches
   }
   function updateSquid(s, now, dt, shipCx, shipCy) {
     const k = s.k; let evade = 0;
