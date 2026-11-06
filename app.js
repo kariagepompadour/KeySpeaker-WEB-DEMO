@@ -357,14 +357,14 @@ const FV = (() => {
     return evade;
   }
   const bez3 = (p, u) => { const a = (1 - u) ** 3, b = 3 * u * (1 - u) ** 2, c = 3 * u * u * (1 - u), d = u ** 3; return [a * p[0][0] + b * p[1][0] + c * p[2][0] + d * p[3][0], a * p[0][1] + b * p[1][1] + c * p[2][1] + d * p[3][1]]; };
-  // one tentacle: 3 dots thick, then 2, then a 1 dot tip; the lit edge on its left; drawn on the body's own dot grid (gx, gy)
+  // one tentacle: 4 dots thick, then 3, then a 2 dot tip; the lit edge on its left; drawn on the body's own dot grid (gx, gy)
   function drawSquidLeg(p, gx, gy) {
     const len = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) + Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]) + Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]);
     const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
     for (let i = 0; i <= steps; i++) {
-      const u = i / steps, [x, y] = bez3(p, u), w = u < 0.4 ? 3 : u < 0.75 ? 2 : 1;
+      const u = i / steps, [x, y] = bez3(p, u), w = u < 0.35 ? 4 : u < 0.7 ? 3 : 2;
       const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
-      for (let j = w - 1; j >= 0; j--) dot(cx + (j - 1) * DOT, cy, j === 0 ? KC.armEdge : KC.arm);
+      for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm);
     }
   }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, and the ring, in front of everything
