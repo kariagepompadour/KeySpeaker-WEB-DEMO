@@ -440,6 +440,15 @@ const FV = (() => {
       fb[i] = ((255 << 24) | (Math.min(255, ((c >> 16) & 255) + b) << 16) | (Math.min(255, ((c >> 8) & 255) + g) << 8) | Math.min(255, (c & 255) + r)) >>> 0;
     }
   }
+  // The searchlight's base: a 3 x 3 dot square of light grey with a blue window in the middle, standing on the ground where the beam starts
+  // (in front of the terrain and the equalizer, so it is always seen).
+  function renderLightBases(s) {
+    const grey = rgb(206, 208, 214), shade = rgb(168, 170, 178), win = rgb(70, 140, 255);
+    for (const l of s.lights) {
+      const gx = Math.round(l.x) - 4, gy = H - 3 * DOT;
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) dot(gx + i * DOT, gy + j * DOT, i === 1 && j === 1 ? win : j === 2 || i === 2 ? shade : grey);
+    }
+  }
   // Is there a part of the monster at the screen point x, y? The ape's silhouette or the squid's head (the tentacles let light through).
   function monsterAt(k, now, x, y) {
     if (k.ph === K_IDLE) return false;
@@ -942,6 +951,7 @@ const FV = (() => {
     }
     dot(sx - DOT, sy + 2 * DOT, C.F2);
     if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
+    renderLightBases(s);                                   // the searchlights' bases, on the ground
     renderKong(s, now, true);                              // both arms: in front of the terrain, the equalizer and the fighter
   }
 
