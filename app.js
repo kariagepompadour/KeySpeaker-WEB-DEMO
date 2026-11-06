@@ -311,7 +311,7 @@ const FV = (() => {
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_CRAWL = [18, 13, 8, 4, 8, 12, 15], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1], SQ_LIFT = [0, 1, 2, 3, 2, 1, 0];   // straight down, then a sharp knee and out along the ground: how far, to which side, and how many dots above the ground it lies (so the lines stack like steps)
+  const SQ_NECK = [11, 15], SQ_ROOT = [-4.5, -3, -1.5, 0, 1.5, 3, 4.5], SQ_CRAWL = [18, 14, 10, 5, 10, 13, 16], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1], SQ_LIFT = [0, 1, 2, 3, 2, 1, 0];   // straight down, then a sharp knee and out along the ground: how far, to which side, and how many dots above the ground it lies (so the lines stack like steps)
   const SQ_UNUSED = 0;   // seven roots along a 6 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
@@ -373,12 +373,12 @@ const FV = (() => {
   const bez3 = (p, u) => { const a = (1 - u) ** 3, b = 3 * u * (1 - u) ** 2, c = 3 * u * u * (1 - u), d = u ** 3; return [a * p[0][0] + b * p[1][0] + c * p[2][0] + d * p[3][0], a * p[0][1] + b * p[1][1] + c * p[2][1] + d * p[3][1]]; };
   // one tentacle: 4 dots thick, then 3, then a 2 dot tip; the lit edge on its left; drawn on the body's own dot grid (gx, gy)
   const mixc = (a, b, t) => rgb(Math.round((a & 255) * (1 - t) + (b & 255) * t), Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t), Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t));
-  function drawSquidLeg(p, gx, gy) {
+  function drawSquidLeg(p, gx, gy, rest) {
     const lit = KC.armEdge, dark = KC.arm, mid = mixc(lit, dark, 0.55);   // three tones: a lit edge, a half tone, and the dark; now and then a dot falls into shadow
     const len = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) + Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]) + Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]);
     const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
     for (let i = 0; i <= steps; i++) {
-      const u = i / steps, [x, y] = bez3(p, u), w = u < 0.3 ? 4 : u < 0.5 ? 3 : u < 0.8 ? 2 : 1;
+      const u = i / steps, [x, y] = bez3(p, u), w = rest ? (u < 0.93 ? 2 : 1) : u < 0.3 ? 4 : u < 0.5 ? 3 : u < 0.8 ? 2 : 1;   // resting tentacles are slim, two dots, so they do not read as one trunk
       const [x1, y1] = bez3(p, Math.min(1, u + 0.02)), [x0, y0] = bez3(p, Math.max(0, u - 0.02)), flat = Math.abs(x1 - x0) > Math.abs(y1 - y0);   // going sideways: the thickness is across, in y
       const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
       for (let j = w - 1; j >= 0; j--) {
@@ -407,7 +407,7 @@ const FV = (() => {
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
         p = p.map((v, n) => [v[0] + (r[n][0] - v[0]) * w, v[1] + (r[n][1] - v[1]) * w]);
       }
-      drawSquidLeg(p, bx, by);
+      drawSquidLeg(p, bx, by, !moving);
     }
   }
 
