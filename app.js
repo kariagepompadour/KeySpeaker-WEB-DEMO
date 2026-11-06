@@ -384,8 +384,9 @@ const FV = (() => {
       for (let j = w - 1; j >= 0; j--) {
         const o = (j - (w >> 1)) * DOT, px_ = flat ? cx : cx + o, py_ = flat ? cy + o : cy;
         let col = j === 0 ? lit : j === 1 && w > 2 ? mid : dark;
-        const h = (Math.imul(Math.round((px_ - gx) / DOT), 73856093) ^ Math.imul(Math.round((py_ - gy) / DOT), 19349663)) >>> 0;
-        if (h % 5 === 0 && col !== dark) col = col === lit ? mid : dark;   // a fleck of shadow here and there
+        const cc = Math.round((px_ - gx) / DOT), h = (Math.imul(cc, 73856093) ^ Math.imul(Math.round((py_ - gy) / DOT), 19349663)) >>> 0;
+        if (rest && !flat) { const m = ((cc - SQ_NECK[0]) % 3 + 3) % 3; col = m === 0 ? dark : m === 1 ? mid : lit; }   // hanging, side by side: shadow in straight vertical lines, one every third column
+        else if (h % 5 === 0 && col !== dark) col = col === lit ? mid : dark;   // a fleck of shadow here and there
         dot(px_, py_, col);
       }
     }
