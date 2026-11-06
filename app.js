@@ -335,7 +335,7 @@ const FV = (() => {
   const SQ_RISE_PX = 6;   // two dots
   const squidTop = (k, now) => H - KH - 2 - Math.round(SQ_RISE_PX * (k.rise || 0));   // it floats: it rises while the fighter is ahead of it (to its left), and sinks back once the fighter has passed
   const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(k, now) + SQ_NECK[1] * DOT];
-  const SQ_REACH_DOTS = 26;   // it goes for the fighter when it is this close (dots) to the neck
+  const SQ_REACH_DOTS = 34;   // it goes for the fighter when it is this close (dots) to the neck
   const squidPick = (dxd, dyd) => (dyd < -13 && Math.abs(dxd) <= 12 ? 0 : dxd < 0 ? 1 : 2);
   const squidNear = (dxd, dyd, k) => Math.hypot(dxd, dyd) <= SQ_REACH_DOTS && dxd >= -SQ_REACH_DOTS && dxd <= 8 && k.x < W - KW - 6;
   function squidStart(s, k, shipCx, shipCy, nx, ny) {
