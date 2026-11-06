@@ -306,9 +306,11 @@ const FV = (() => {
      of it or behind it), curl into a ring around it, and miss as the fighter slips away. 23 x 30 dots, like the ape. ---- */
   const SQ_WID = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 23, 19, 13, 11];     // the head and the wide base under it: width of each row, centred
   const SQ_EYES = { 9: [5, 6, 7, 8, 14, 15, 16, 17], 10: [7, 8, 9, 10, 12, 13, 14, 15] };   // slanted, the inner ends lower
+  const SQ_MOUTH = typeof location !== "undefined" && /mouth=1/.test(location.search);
   const SQ_BASE = SQ_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
     const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
+    if (SQ_MOUTH && ((r === 12 && c >= 8 && c <= 14) || (r === 13 && (c === 7 || c === 15)))) return "M";   // a flat, grumpy mouth under the eyes, its corners turned down (trial: ?mouth=1)
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
   const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_FLARE = [15, 11, 7, 3, 7, 11, 15], SQ_ENDX = [-14, -10, -6, 2, 6, 10, 14], SQ_ENDY = [-1, 2, -2, 2, -2, 2, -1];   // seen from above the tentacles lie out around the monster, like rays; seen from the side that is a spread to the left and right, with the ones that point toward us ending lower and the ones that point away ending higher (in dots, from the knee)
@@ -393,7 +395,7 @@ const FV = (() => {
   }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, in front of everything
     const k = s.k, bx = Math.round(k.x), by = squidTop(k, now);
-    if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, KC[ch]); }
+    if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, ch === "M" ? mixc(KC.E, KC.K, 0.4) : KC[ch]); }
     const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
     const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
     const w = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : reaching ? 1 : k.ph === K_LEAVE && k.tx ? 1 - ease3(k.t / 0.5) : 0;   // 0 at rest ... 1 stretched out
