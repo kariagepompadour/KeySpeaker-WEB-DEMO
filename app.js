@@ -417,7 +417,7 @@ const FV = (() => {
   /* ---- SEARCHLIGHTS (trial): a city on alert. Searchlights stand on the ground, hidden behind the terrain bars, and flow from right to left
      with the terrain (30 px/s), each sweeping the sky with a slim beam that widens and fades toward the top. A few at a time, only while
      music plays (the ones already there carry on). Drawn behind the monsters and the terrain, added to the stars' light. ---- */
-  const LIGHTS_FRONT = typeof location !== "undefined" && /layer=2/.test(location.search);   // ?layer=2: in front of the terrain, behind the equalizer
+  const LIGHTS_FRONT = !(typeof location !== "undefined" && /layer=1/.test(location.search));   // the searchlights are in front of the monsters and the terrain, behind the equalizer (?layer=1: behind them)
   const MAX_LIGHTS = 2, LIGHT_MS_MIN = 25000, LIGHT_MS_MAX = 50000, LIGHT_LEN = 150;
   const lightsNow = () => typeof location !== "undefined" && /lights=now/.test(location.search);   // ?lights=now: one at once, music or not
   function updateLights(s, now, dt) {
@@ -856,7 +856,7 @@ const FV = (() => {
         for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = s.lit[k];
       }
     }
-    if (LIGHTS_FRONT) renderLights(s, now);                // (?layer=2) the searchlights in front of the terrain, behind the equalizer
+    if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
