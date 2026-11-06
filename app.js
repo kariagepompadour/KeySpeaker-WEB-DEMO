@@ -368,17 +368,7 @@ const FV = (() => {
       for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm);
     }
   }
-  // the tip: a short spike that flicks outward, away from the monster's body (ox, oy: that direction), like an open claw (wk 0..1: how far it has grown)
-  function drawSquidHook(A, tx, ty, ox, oy, wk, gx, gy) {
-    const q = [A, [A[0] + (tx * 1.5 + ox * 1.5) * DOT * wk, A[1] + (ty * 1.5 + oy * 1.5) * DOT * wk], [A[0] + ox * 4 * DOT * wk, A[1] + oy * 4 * DOT * wk], [A[0] + ox * 7 * DOT * wk, A[1] + oy * 7 * DOT * wk]];
-    const steps = Math.max(6, Math.ceil(12 * wk));
-    for (let i = 0; i <= steps; i++) {
-      const u = i / steps, [x, y] = bez3(q, u), w = u < 0.6 ? 2 : 1;
-      const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
-      for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j === 0 ? KC.armEdge : KC.arm);
-    }
-  }
-  function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, and the ring, in front of everything
+  function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, in front of everything
     const k = s.k, bx = Math.round(k.x), by = squidTop(now);
     if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, KC[ch]); }
     const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
@@ -396,14 +386,6 @@ const FV = (() => {
         p = p.map((v, n) => [v[0] + (r[n][0] - v[0]) * w, v[1] + (r[n][1] - v[1]) * w]);
       }
       drawSquidLeg(p, bx, by);
-      if (moving) {
-        const tl = Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]) || 1, ol = Math.hypot(p[3][0] - nx, p[3][1] - ny) || 1;   // outward = away from the neck, not toward it
-        drawSquidHook(p[3], (p[3][0] - p[2][0]) / tl, (p[3][1] - p[2][1]) / tl, (p[3][0] - nx) / ol, (p[3][1] - ny) / ol, w, bx, by);
-      }
-    }
-    if (front && (k.ph === K_GRAB && k.t > K_DUR[K_GRAB] * 0.6 || k.ph === K_MISS && k.t < 0.25)) {   // the smash: a small burst where the tips come down
-      const hx = bx + DOT * Math.round((k.tx - bx) / DOT), hy = by + DOT * Math.round((k.ty - by) / DOT);
-      for (const [dx, dy] of [[0, 0], [-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]]) dot(hx + dx * DOT, hy + dy * DOT, k.ph === K_MISS || (dx === 0 && dy === 0) ? KC.E : KC.armEdge);
     }
   }
 
