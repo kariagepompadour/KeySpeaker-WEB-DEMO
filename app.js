@@ -417,12 +417,12 @@ const FV = (() => {
   /* ---- SEARCHLIGHTS (trial): a city on alert. Searchlights stand on the ground, hidden behind the terrain bars, and flow from right to left
      with the terrain (30 px/s), each sweeping the sky with a slim beam that widens and fades toward the top. A few at a time, only while
      music plays (the ones already there carry on). Drawn behind the monsters and the terrain, added to the stars' light. ---- */
-  const MAX_LIGHTS = 3, LIGHT_MS_MIN = 3500, LIGHT_MS_MAX = 8000, LIGHT_LEN = 150;
+  const MAX_LIGHTS = 2, LIGHT_MS_MIN = 25000, LIGHT_MS_MAX = 50000, LIGHT_LEN = 150;
   const lightsNow = () => typeof location !== "undefined" && /lights=now/.test(location.search);   // ?lights=now: one at once, music or not
   const LOCK_S = 1.5, LOCK_EVADE_S = 0.7;   // a searchlight that catches the fighter holds it this long; the fighter slips away at first
   function updateLights(s, now, dt, shipCx, shipCy) {
-    if (s.nextLightMs === 0) s.nextLightMs = now + (lightsNow() ? 300 : 2500);
-    if (s.nextLockMs === 0) s.nextLockMs = now + (lightsNow() ? 1500 : 6000);
+    if (s.nextLightMs === 0) s.nextLightMs = now + (lightsNow() ? 300 : 6000);
+    if (s.nextLockMs === 0) s.nextLockMs = now + (lightsNow() ? 1500 : 12000);
     let evade = 0;
     for (const l of s.lights) {
       l.x -= SCROLL_PX_S * dt;
@@ -430,8 +430,8 @@ const FV = (() => {
       if (!l.lock) {
         l.a = l.base + l.amp * Math.sin(now * 0.001 * l.w + l.ph); l.len = LIGHT_LEN;
         // the beam passes near the fighter: now and then it catches it
-        if (now - s.nextLockMs >= 0 && Math.abs(want - l.a) < 0.17 && Math.abs(want) < 0.95 && dist < LIGHT_LEN) {
-          l.lock = true; l.t = 0; s.nextLockMs = now + 7000 + nextRandom(s) % 7000;
+        if (l.canLock && now - s.nextLockMs >= 0 && Math.abs(want - l.a) < 0.17 && Math.abs(want) < 0.95 && dist < LIGHT_LEN) {
+          l.lock = true; l.t = 0; s.nextLockMs = now + 18000 + nextRandom(s) % 18000;
         }
       } else {
         l.t += dt;
@@ -443,7 +443,7 @@ const FV = (() => {
     s.lights = s.lights.filter(l => l.x > -LIGHT_LEN);
     if ((s.prevDb > DB_SILENT || lightsNow()) && s.lights.length < MAX_LIGHTS && now - s.nextLightMs >= 0) {
       const d = Math.PI / 180;
-      s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100, a: 0, len: LIGHT_LEN, lock: false, t: 0 });
+      s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100, a: 0, len: LIGHT_LEN, lock: false, t: 0, canLock: nextRandom(s) % 100 < 45 });   // not every searchlight is out to catch the fighter
       s.nextLightMs = now + LIGHT_MS_MIN + nextRandom(s) % (LIGHT_MS_MAX - LIGHT_MS_MIN);
     }
     return evade;
