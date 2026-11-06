@@ -343,7 +343,7 @@ const FV = (() => {
     const dxd = (shipCx - nx) / DOT;
     k.flip = Math.abs(dxd) < 4 ? nextRandom(s) % 2 : dxd < 0 ? 0 : 1;   // fighter above: the tentacles go up the side it is on
     const aimLeft = k.sc === 1 || (k.sc === 0 && !k.flip);   // the fighter's side: the left pair or the right pair
-    k.legs = nextRandom(s) % 100 < 40 ? (aimLeft ? [0, 1, 6, 5] : [6, 5, 0, 1]) : (aimLeft ? [0, 1] : [6, 5]);   // only 4 in 10 reaches use both sides; often only the fighter's side stretches
+    k.legs = nextRandom(s) % 100 < 50 ? (aimLeft ? [0, 1, 6, 5] : [6, 5, 0, 1]) : (aimLeft ? [0, 1] : [6, 5]);   // half of the reaches use both sides, half only the fighter's side
   }
   function updateSquid(s, now, dt, shipCx, shipCy) {
     const k = s.k; let evade = 0;
