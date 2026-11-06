@@ -311,7 +311,7 @@ const FV = (() => {
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_CRAWL = [16, 11, 7, 5, 8, 11, 16], SQ_DIR = [-1, -1, 1, -1, -1, 1, 1];   // long: they lie out along the ground, some crossing over the others   // how far each tentacle trails along the ground, and to which side
+  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_CRAWL = [18, 13, 8, 4, 8, 12, 15], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1], SQ_LIFT = [0, 1, 2, 3, 2, 1, 0];   // straight down, then a sharp knee and out along the ground: how far, to which side, and how many dots above the ground it lies (so the lines stack like steps)
   const SQ_UNUSED = 0;   // seven roots along a 6 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
@@ -399,10 +399,9 @@ const FV = (() => {
         for (let i = 0; i < 7; i++) {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
-      const R0 = [nx + SQ_ROOT[i] * DOT, ny], gy = H - 2, drop = gy - ny, cr = SQ_CRAWL[i] * DOT, sg = SQ_DIR[i];
+      const R0 = [nx + SQ_ROOT[i] * DOT, ny], gy = H - 2 - SQ_LIFT[i] * DOT, cr = SQ_CRAWL[i] * DOT, sg = SQ_DIR[i];
       // at rest: hanging straight down to the ground, where it is bent like a knee and lies along it (the tips stay on the ground when the body rises)
-      const xv = R0[0] + SQ_ROOT[i] * 1.2 * DOT;   // they drift apart a little on the way down
-      let p = [R0, [R0[0] + SQ_ROOT[i] * 0.5 * DOT, ny + drop * 0.5], [xv + sg * cr * 0.5, gy - (i & 1 ? 6 : 3)], [xv + sg * cr, gy]];   // down, then folded: the last part lies flat on the ground
+      let p = [R0, [R0[0], gy], [R0[0], gy], [R0[0] + sg * cr, gy]];   // straight down, then a sharp knee (both middle points on the corner), then flat along the ground
       if (moving) {
         const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * DOT, T[1] + sc.o[1] * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
