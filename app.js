@@ -332,7 +332,7 @@ const FV = (() => {
     0: { d1: [-20, -2], d2: [-6, 4], o: [-7, 2] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-6, 8] } };
   const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
-  const squidTop = now => H - KH - 4;   // it floats a little above the ground, and keeps still
+  const squidTop = now => H - KH - 4 + Math.round(Math.sin(now * 0.0008) * 3);   // it floats: a very slow bob, one swing in about 8 seconds
   const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(now) + SQ_NECK[1] * DOT];
   const SQ_REACH_DOTS = 26;   // it goes for the fighter when it is this close (dots) to the neck
   const squidPick = (dxd, dyd) => (dyd < -13 && Math.abs(dxd) <= 12 ? 0 : dxd < 0 ? 1 : 2);
