@@ -149,7 +149,7 @@ const FV = (() => {
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
         k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
         k.kind = forcedKind(s);
-        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = nextRandom(s) % 100 < 30; k.pal = pickSquidPal(s); /* 3 visits in 10 it does not reach at all */ k.maxTries = 1 + nextRandom(s) % 2; k.sc = 0; k.legs = [0, 0]; } }
+        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = nextRandom(s) % 100 < 30; k.pal = pickSquidPal(s); /* 3 visits in 10 it does not reach at all */ k.maxTries = 1 + nextRandom(s) % 2; k.sc = 0; k.legs = [0, 0]; k.born = now; } }
       return evadeTgt;
     }
     if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
@@ -332,8 +332,8 @@ const FV = (() => {
     0: { d1: [-20, -2], d2: [-6, 4], o: [-7, 2] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-6, 8] } };
   const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
-  const squidTop = now => H - KH - 4 + Math.round(Math.sin(now * 0.0008) * 2);   // it floats: a very slow bob of 2 px up and down, one swing in about 8 seconds
-  const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(now) + SQ_NECK[1] * DOT];
+  const squidTop = (k, now) => H - KH - 2 - Math.round(2 * Math.min(1, Math.max(0, (now - k.born) / 8000)));   // it floats: over its visit it rises 2 px, slowly, and stays up (it never sinks back)
+  const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(k, now) + SQ_NECK[1] * DOT];
   const SQ_REACH_DOTS = 26;   // it goes for the fighter when it is this close (dots) to the neck
   const squidPick = (dxd, dyd) => (dyd < -13 && Math.abs(dxd) <= 12 ? 0 : dxd < 0 ? 1 : 2);
   const squidNear = (dxd, dyd, k) => Math.hypot(dxd, dyd) <= SQ_REACH_DOTS && dxd >= -SQ_REACH_DOTS && dxd <= 8 && k.x < W - KW - 6;
@@ -382,7 +382,7 @@ const FV = (() => {
     }
   }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, in front of everything
-    const k = s.k, bx = Math.round(k.x), by = squidTop(now);
+    const k = s.k, bx = Math.round(k.x), by = squidTop(k, now);
     if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, KC[ch]); }
     const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
     const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
