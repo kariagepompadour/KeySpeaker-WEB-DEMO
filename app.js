@@ -420,34 +420,18 @@ const FV = (() => {
   const LIGHTS_FRONT = typeof location !== "undefined" && /layer=2/.test(location.search);   // ?layer=2: in front of the terrain, behind the equalizer
   const MAX_LIGHTS = 2, LIGHT_MS_MIN = 25000, LIGHT_MS_MAX = 50000, LIGHT_LEN = 150;
   const lightsNow = () => typeof location !== "undefined" && /lights=now/.test(location.search);   // ?lights=now: one at once, music or not
-  const LOCK_S = 1.5, LOCK_EVADE_S = 0.7;   // a searchlight that catches the fighter holds it this long; the fighter slips away at first
-  function updateLights(s, now, dt, shipCx, shipCy) {
+  function updateLights(s, now, dt) {
     if (s.nextLightMs === 0) s.nextLightMs = now + (lightsNow() ? 300 : 6000);
-    if (s.nextLockMs === 0) s.nextLockMs = now + (lightsNow() ? 1500 : 12000);
-    let evade = 0;
     for (const l of s.lights) {
       l.x -= SCROLL_PX_S * dt;
-      const dx = shipCx - l.x, dy = H - 1 - shipCy, want = Math.atan2(dx, dy), dist = Math.hypot(dx, dy);
-      if (!l.lock) {
-        l.a = l.base + l.amp * Math.sin(now * 0.001 * l.w + l.ph); l.len = LIGHT_LEN;
-        // the beam passes near the fighter: now and then it catches it
-        if (l.canLock && now - s.nextLockMs >= 0 && Math.abs(want - l.a) < 0.17 && Math.abs(want) < 0.95 && dist < LIGHT_LEN) {
-          l.lock = true; l.t = 0; s.nextLockMs = now + 18000 + nextRandom(s) % 18000;
-        }
-      } else {
-        l.t += dt;
-        l.a += (want - l.a) * (1 - Math.exp(-dt / 0.15)); l.len += (Math.min(dist, LIGHT_LEN) - l.len) * (1 - Math.exp(-dt / 0.15));   // it follows the fighter, and ends on it
-        if (l.t < LOCK_EVADE_S) evade = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;
-        if (l.t >= LOCK_S || Math.abs(want) > 1.1) { l.lock = false; l.base = l.a; l.ph = -now * 0.001 * l.w; l.len = LIGHT_LEN; }   // lost it: back to sweeping from where it is
-      }
+      l.a = l.base + l.amp * Math.sin(now * 0.001 * l.w + l.ph);
     }
     s.lights = s.lights.filter(l => l.x > -LIGHT_LEN);
     if ((s.prevDb > DB_SILENT || lightsNow()) && s.lights.length < MAX_LIGHTS && now - s.nextLightMs >= 0) {
       const d = Math.PI / 180;
-      s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100, a: 0, len: LIGHT_LEN, lock: false, t: 0, canLock: nextRandom(s) % 100 < 45 });   // not every searchlight is out to catch the fighter
+      s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100, a: 0 });
       s.nextLightMs = now + LIGHT_MS_MIN + nextRandom(s) % (LIGHT_MS_MAX - LIGHT_MS_MIN);
     }
-    return evade;
   }
   function addDot(x, y, r, g, b) {   // a 3 x 3 dot, its light added to what is behind it (the stars show through)
     for (let dy = 0; dy < DOT; dy++) for (let dx = 0; dx < DOT; dx++) {
@@ -459,16 +443,12 @@ const FV = (() => {
   function renderLights(s, now) {
     for (const l of s.lights) {
       const a = l.a, sn = Math.sin(a), cs = Math.cos(a);
-      for (let t = 0; t < l.len; t += DOT) {
+      for (let t = 0; t < LIGHT_LEN; t += DOT) {
         const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
         for (let j = -hw; j <= hw; j++) {
           const k = Math.pow(Math.max(0, fade), 0.6) * (Math.abs(j) === hw ? 0.5 : 1) * 0.95;
           addDot(DOT * Math.round((cx + j * DOT) / DOT), DOT * Math.round(y / DOT), Math.round(150 * k), Math.round(190 * k), Math.round(255 * k));
         }
-      }
-      if (l.lock) {   // it has caught the fighter: a bright spot where the beam ends
-        const ex = l.x + sn * l.len, ey = H - 1 - cs * l.len, g = Math.min(1, l.t / 0.2);
-        for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) addDot(DOT * Math.round(ex / DOT) + dx * DOT, DOT * Math.round(ey / DOT) + dy * DOT, Math.round(200 * g), Math.round(220 * g), Math.round(255 * g));
       }
     }
   }
@@ -477,7 +457,7 @@ const FV = (() => {
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, nextLockMs: 0,
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0,
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
     eb: Array.from({ length: MAX_EBULLETS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
@@ -533,7 +513,7 @@ const FV = (() => {
     s.nextFireMs = nowMs + FIRE_MS_MIN; s.avgSet = false; s.nextBombMs = nowMs + BOMB_MS_MIN / 2;
     for (const a of [s.m, s.b, s.x, s.e, s.mine, s.eb]) for (const o of a) o.on = false;
     s.shieldUntil = nowMs; s.dodging = false; s.beat = false; s.lunge = 0;
-    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0; s.nextLockMs = 0;
+    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0;
     s.eq = false; s.pattern = s.next = 0; s.scale = 0; s.fade = 0;
     s.modeSinceMs = s.silentSinceMs = nowMs; s.wasSilent = false; s.eqFresh = false; s.eqAvgSet = false;
     s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0);
@@ -699,9 +679,8 @@ const FV = (() => {
     if (!threat) s.dodging = false;
     if (target < TOP + 4) target = TOP + 4;
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
-    let evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
-    const lightEvade = updateLights(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
-    if (!evadeTgt) evadeTgt = lightEvade;
+    updateLights(s, now, dt);
+    const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
 
