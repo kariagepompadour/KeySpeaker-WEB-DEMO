@@ -311,7 +311,7 @@ const FV = (() => {
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_FLARE = [21, 15, 9, 3, 9, 15, 21], SQ_ENDX = [-22, -16, -9, 3, 9, 15, 22], SQ_ENDY = [-1, 2, -2, 2, -2, 2, -1];   // seen from above the tentacles lie out around the monster, like rays; seen from the side that is a spread to the left and right, with the ones that point toward us ending lower and the ones that point away ending higher (in dots, from the knee)
+  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_FLARE = [15, 11, 7, 3, 7, 11, 15], SQ_ENDX = [-14, -10, -6, 2, 6, 10, 14], SQ_ENDY = [-1, 2, -2, 2, -2, 2, -1];   // seen from above the tentacles lie out around the monster, like rays; seen from the side that is a spread to the left and right, with the ones that point toward us ending lower and the ones that point away ending higher (in dots, from the knee)
   const SQ_UNUSED = 0;   // seven roots along a 6 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
