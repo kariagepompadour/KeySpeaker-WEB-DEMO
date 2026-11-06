@@ -305,7 +305,7 @@ const FV = (() => {
      tentacles fan out. It floats in with the terrain, and two of its tentacles stretch out together for the fighter (over its head, ahead
      of it or behind it), curl into a ring around it, and miss as the fighter slips away. 23 x 30 dots, like the ape. ---- */
   const SQ_WID = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 23, 19, 13, 11];     // the head and the wide base under it: width of each row, centred
-  const SQ_EYES = { 9: [5, 6, 16, 17], 10: [7, 8, 14, 15] };   // slanted, the inner ends lower
+  const SQ_EYES = { 9: [7, 8, 14, 15], 10: [9, 10, 12, 13] };   // slanted, the inner ends lower
   const SQ_MOUTH = !(typeof location !== "undefined" && /mouth=0/.test(location.search));   // ?mouth=0 shows it without
   const SQ_BASE = SQ_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
     const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
