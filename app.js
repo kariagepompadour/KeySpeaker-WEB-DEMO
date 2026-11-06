@@ -305,13 +305,13 @@ const FV = (() => {
      tentacles fan out. It floats in with the terrain, and two of its tentacles stretch out together for the fighter (over its head, ahead
      of it or behind it), curl into a ring around it, and miss as the fighter slips away. 23 x 30 dots, like the ape. ---- */
   const SQ_WID = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 23, 21, 17, 15];     // the head and the wide base under it: width of each row, centred
-  const SQ_EYES = { 7: [5, 6, 7, 8, 14, 15, 16, 17], 8: [7, 8, 9, 10, 12, 13, 14, 15] };   // slanted, the inner ends lower
+  const SQ_EYES = { 9: [5, 6, 7, 8, 14, 15, 16, 17], 10: [7, 8, 9, 10, 12, 13, 14, 15] };   // slanted, the inner ends lower
   const SQ_BASE = SQ_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
     const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-5.5, -2.75, 0, 2.75, 5.5], SQ_ANG = [-50, -25, 0, 25, 50], SQ_LEN = [17, 16, 15, 16, 17];   // five roots spread along a 14 dot base, fanning out
+  const SQ_NECK = [11, 15], SQ_ROOT = [-5.5, -2.75, 0, 2.75, 5.5], SQ_ANG = [-12, -6, 0, 6, 12], SQ_LEN = [13, 14, 15, 14, 13];   // five roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart
   const SQ_RING_RX = 6, SQ_RING_RY = 4.5;
   // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
@@ -378,7 +378,7 @@ const FV = (() => {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
       const a = SQ_ANG[i] * Math.PI / 180, L = SQ_LEN[i], R0 = [nx + SQ_ROOT[i] * DOT, ny], p2 = [R0[0] + L * Math.sin(a) * DOT, R0[1] + L * Math.cos(a) * DOT];
-      let p = [R0, [R0[0] + (L * 0.35 * Math.sin(a) + SQ_ROOT[i] * 0.4) * DOT, R0[1] + L * 0.4 * DOT], [p2[0] + Math.sin(a) * 3 * DOT, p2[1] - L * 0.35 * DOT], p2];   // at rest: hanging, fanned
+      let p = [R0, [R0[0] + (L * 0.35 * Math.sin(a) + SQ_ROOT[i] * 0.15) * DOT, R0[1] + L * 0.4 * DOT], [p2[0] + Math.sin(a) * 3 * DOT, p2[1] - L * 0.35 * DOT], p2];   // at rest: hanging, fanned
       if (moving) {
         const sc = SQ_SC[k.sc][i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * ringScale * DOT, T[1] + sc.o[1] * ringScale * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
