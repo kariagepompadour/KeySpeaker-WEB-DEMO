@@ -14,7 +14,9 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
 - **Flight mode**: the sound's level builds the terrain, a fighter flies over it, shoots targets and bombs craters; the
   30-band equalizer comes and goes by itself (every minute or after a gap between songs).
   While music plays, a space monster (the beast from the Space Invaders cabinet art) now and then walks in behind the
-  terrain and reaches for the fighter with a clawed hand, drawn in front of everything, and misses.
+  terrain and reaches for the fighter with a clawed hand, drawn in front of everything, and misses. Half of the visits are
+  a second monster instead, a Space Invaders squid: a pointed head over seven tentacles that float in and stretch out
+  toward the fighter, before it passes and again after it has passed, now and then.
 - **Keyboard (text input) mode**: the spinning Earth with "KEY BOARD", Mac/Win and A/あ, the cheat sheet, and the
   MOUSE screen while G0 is held.
 - **Help screen**, with the device's own key list.
