@@ -82,7 +82,8 @@ const FV = (() => {
   const K_SPEED = { [K_THREAT]: 0.4, [K_WALK]: 1, [K_REACH]: 0.6, [K_GRAB]: 0.3, [K_MISS]: 0.3, [K_FAIL]: 0.12, [K_LEAVE]: 1 };
   const K_ARM = 26, K_START_DX = 44, K_CHASE_DX = 36, K_GAP_MIN = 1.0, K_GAP_VAR = 1.2, K_RETRY_R = 55, K_NOTICE_DX = 84, K_EVADE_PX = 17, K_HANG = 44;
   const KONG_MS_MIN = 24000, KONG_MS_MAX = 56000;   // between two visits: about half as often as before, so it stays a treat
-  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now/.test(location.search)) ? 1500 : 10000;
+  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now|squid=/.test(location.search)) ? 1500 : 10000;
+  const forcedKind = s => { const q = typeof location !== "undefined" ? location.search : ""; return /squid=1/.test(q) ? 1 : /squid=0/.test(q) ? 0 : nextRandom(s) % 100 < 50 ? 1 : 0; };   // each visit: the ape or the squid, by lot (?squid=1 / ?squid=0 force one)
   // The monster from the Space Invaders cabinet art: a black, hairy beast with horn-like ears, shoulders hunched up around a
   // small head, glowing yellow eyes (no pupils) and a red rim light on its left edge. Drawn from a silhouette (spans per row).
   const SPANS = [
@@ -126,7 +127,7 @@ const FV = (() => {
   const KCS = PALS.map(p => ({ ...KC, B: p.lit, K: p.dark, R: p.dark, T: p.dark, D: p.dark, E: p.eye, arm: p.dark, armEdge: p.lit, armShade: p.dark, hand: p.dark }));
   const pickPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < PAL_PERCENT.length - 1 && r >= PAL_PERCENT[i]) r -= PAL_PERCENT[i++]; return i; };
 
-  const newKong = () => ({ pal: 0, noReach: false, nextAct: 0, nextAt: 0, doThreat: false, threatDone: false, threat: 0, tries: 0, maxTries: 1, arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
+  const newKong = () => ({ kind: 0, pal: 0, noReach: false, nextAct: 0, nextAt: 0, doThreat: false, threatDone: false, threat: 0, tries: 0, maxTries: 1, arm: 0, chase: false, style: 0, ph: K_IDLE, t: 0, x: W, nextMs: 0, tx: 0, ty: 0, face: "calm", sx: 0, sy: 0, hand: [0, 0], hand2: [0, 0] });
   const kongShoulder = k => [Math.round(k.x) + 7, H - KH + 7 * DOT + 2];       // arm toward the fighter (left)
   const kongShoulder2 = k => [Math.round(k.x) + 19 * DOT + 1, H - KH + 8 * DOT + 3];     // the other arm
   const clampReach = (sx, sy, tx, ty, r) => { const d = Math.hypot(tx - sx, ty - sy); return d <= r ? [tx, ty] : [sx + (tx - sx) * r / d, sy + (ty - sy) * r / d]; };
@@ -146,9 +147,12 @@ const FV = (() => {
         // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
         // it only bluffs (the display, no reach at all).
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
-        k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12; }
+        k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
+        k.kind = forcedKind(s);
+        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = nextRandom(s) % 100 < 8; k.pal = pickSquidPal(s); k.maxTries = 1 + nextRandom(s) % 2; k.sc = 0; k.legs = [0, 0]; } }
       return evadeTgt;
     }
+    if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
     k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
     const [shx, shy] = kongShoulder(k);
     if (k.ph === K_WALK) {
@@ -228,6 +232,7 @@ const FV = (() => {
     const k = s.k;
     KC = KCS[k.pal] || KCS[0];
     if (k.ph === K_IDLE) return;
+    if (k.kind === 1) return renderSquid(s, now, front);
     const fail = k.ph === K_FAIL, tr = Math.floor(now / 70) & 1;
     // stomping tantrum: the whole body hops and shakes
     const stomp = fail ? Math.abs(Math.sin(now * 0.012)) : 0;
@@ -292,6 +297,97 @@ const FV = (() => {
       const mx = bx + 18 * DOT, my = by - 8;
       if (tr) { fillRect(mx, my + 2, 7, 3, KC.mark); fillRect(mx + 2, my, 3, 7, KC.mark); }
       if (!tr) { px(bx + 2 * DOT, by + 4, KC.spark); px(bx + 21 * DOT, by + 8, KC.spark); px(bx + 11 * DOT, by - 5, KC.spark); }
+    }
+  }
+
+
+  /* ---- SQUID (trial): the second big monster, a Space Invaders squid. A pointed bell of a head over one narrow neck, from which five
+     tentacles fan out. It floats in with the terrain, and two of its tentacles stretch out together for the fighter (over its head, ahead
+     of it or behind it), curl into a ring around it, and miss as the fighter slips away. 23 x 30 dots, like the ape. ---- */
+  const SQ_WID = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 23, 19, 5, 3];       // the head and the neck: width of each row, centred
+  const SQ_EYES = { 7: [5, 6, 7, 8, 14, 15, 16, 17], 8: [7, 8, 9, 10, 12, 13, 14, 15] };   // slanted, the inner ends lower
+  const SQ_BASE = SQ_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
+    const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
+    if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
+    const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
+  }));
+  const SQ_NECK = [11, 15], SQ_ANG = [-40, -20, 0, 20, 40], SQ_LEN = [17, 16, 15, 16, 17];
+  const SQ_RING_RX = 6, SQ_RING_RY = 4.5;
+  // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
+  // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
+  const SQ_SC = [
+    { 0: { d1: [-23, 3], d2: [-15, -1], o: [-6, 0] }, 4: { d1: [23, 3], d2: [15, -1], o: [6, 0] } },
+    { 0: { d1: [-11, 7], d2: [0, 3], o: [6, 0] }, 1: { d1: [-9, 11], d2: [2, 4], o: [2, 4] } },
+    { 4: { d1: [11, 0], d2: [0, -3], o: [-3, -4] }, 3: { d1: [7, 15], d2: [-2.4, 5], o: [-4.6, 3] } },
+  ];
+  const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
+  const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
+  const squidTop = now => H - KH - 4 + Math.round(Math.sin(now * 0.003) * 3);   // it floats: a slow bob
+  const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(now) + SQ_NECK[1] * DOT];
+  const SQ_REACH_DOTS = 26;   // it goes for the fighter when it is this close (dots) to the neck
+  const squidPick = (dxd, dyd) => (dyd < -13 && Math.abs(dxd) <= 12 ? 0 : dxd < 0 ? 1 : 2);
+  const squidNear = (dxd, dyd, k) => Math.hypot(dxd, dyd) <= SQ_REACH_DOTS && dxd >= -SQ_REACH_DOTS && dxd <= 8 && k.x < W - KW - 6;
+  function squidStart(s, k, shipCx, shipCy, nx, ny) {
+    k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.tries++;
+    k.sc = squidPick((shipCx - nx) / DOT, (shipCy - ny) / DOT);
+    k.legs = Object.keys(SQ_SC[k.sc]).map(Number);
+  }
+  function updateSquid(s, now, dt, shipCx, shipCy) {
+    const k = s.k; let evade = 0;
+    k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
+    const [nx, ny] = squidNeck(k, now), dxd = (shipCx - nx) / DOT, dyd = (shipCy - ny) / DOT;
+    if (k.ph === K_WALK) {
+      if (!k.noReach && k.tries < k.maxTries && squidNear(dxd, dyd, k)) squidStart(s, k, shipCx, shipCy, nx, ny);
+    } else if (k.ph === K_REACH) { if (k.t >= K_DUR[K_REACH]) { k.ph = K_GRAB; k.t = 0; } }
+    else if (k.ph === K_GRAB) {
+      evade = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;                    // the fighter slips out of the closing ring
+      if (k.t >= K_DUR[K_GRAB]) { k.ph = K_MISS; k.t = 0; }
+    } else if (k.ph === K_MISS) {
+      evade = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;
+      if (k.t >= K_DUR[K_MISS]) {
+        k.ph = K_LEAVE; k.t = 0; k.face = "calm";                         // the tentacles are drawn back; then, maybe, once more
+        k.nextAct = k.tries >= k.maxTries ? 0 : nextRandom(s) % 100 < 45 ? 1 : 0;
+        k.nextAt = K_GAP_MIN + (nextRandom(s) % 1000) / 1000 * K_GAP_VAR;
+      }
+    } else if (k.ph === K_LEAVE && k.nextAct && k.t >= k.nextAt) {
+      k.nextAct = 0;
+      if (squidNear(dxd, dyd, k)) squidStart(s, k, shipCx, shipCy, nx, ny);
+    }
+    if (k.x < -KW - 4) { k.ph = K_IDLE; k.nextMs = now + (/squid=/.test(location.search) ? 2500 : KONG_MS_MIN + nextRandom(s) % (KONG_MS_MAX - KONG_MS_MIN)); }   // ?squid=1 for a quick look: one visit after another
+    return evade;
+  }
+  const bez3 = (p, u) => { const a = (1 - u) ** 3, b = 3 * u * (1 - u) ** 2, c = 3 * u * u * (1 - u), d = u ** 3; return [a * p[0][0] + b * p[1][0] + c * p[2][0] + d * p[3][0], a * p[0][1] + b * p[1][1] + c * p[2][1] + d * p[3][1]]; };
+  // one tentacle: 3 dots thick, then 2, then a 1 dot tip; the lit edge on its left; drawn on the body's own dot grid (gx, gy)
+  function drawSquidLeg(p, gx, gy) {
+    const len = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) + Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]) + Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]);
+    const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps, [x, y] = bez3(p, u), w = u < 0.4 ? 3 : u < 0.75 ? 2 : 1;
+      const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
+      for (let j = w - 1; j >= 0; j--) dot(cx + (j - 1) * DOT, cy, j === 0 ? KC.armEdge : KC.arm);
+    }
+  }
+  function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, and the ring, in front of everything
+    const k = s.k, bx = Math.round(k.x), by = squidTop(now);
+    if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, KC[ch]); }
+    const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT], P0 = [nx, ny];
+    const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
+    const w = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : reaching ? 1 : k.ph === K_LEAVE && k.tx ? 1 - ease3(k.t / 0.5) : 0;   // 0 at rest ... 1 stretched out
+    const ringScale = k.ph === K_GRAB ? 1 - 0.45 * ease3(k.t / K_DUR[K_GRAB]) : k.ph === K_MISS ? 0.55 : 1;
+    for (let i = 0; i < 5; i++) {
+      const moving = w > 0 && k.legs.includes(i);
+      if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
+      const a = SQ_ANG[i] * Math.PI / 180, L = SQ_LEN[i], p2 = [nx + L * Math.sin(a) * DOT, ny + L * Math.cos(a) * DOT];
+      let p = [P0, [nx + L * 0.525 * Math.sin(a) * DOT, ny + L * 0.4 * DOT], [p2[0] + Math.sin(a) * 3 * DOT, p2[1] - L * 0.35 * DOT], p2];   // at rest: hanging, fanned
+      if (moving) {
+        const sc = SQ_SC[k.sc][i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * ringScale * DOT, T[1] + sc.o[1] * ringScale * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
+        const r = [P0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
+        p = p.map((v, n) => [v[0] + (r[n][0] - v[0]) * w, v[1] + (r[n][1] - v[1]) * w]);
+      }
+      drawSquidLeg(p, bx, by);
+    }
+    if (front && reaching && w >= 0.9 && k.ph !== K_REACH) {   // the ring that closes around the fighter
+      for (let a = 0; a < 6.28; a += 0.28) dot(bx + DOT * Math.round((k.tx + SQ_RING_RX * ringScale * DOT * Math.cos(a) - bx) / DOT), by + DOT * Math.round((k.ty + SQ_RING_RY * ringScale * DOT * Math.sin(a) - by) / DOT), KC.armEdge);
     }
   }
 
