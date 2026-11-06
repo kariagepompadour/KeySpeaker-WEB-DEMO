@@ -149,7 +149,7 @@ const FV = (() => {
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
         k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
         k.kind = forcedKind(s);
-        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = nextRandom(s) % 100 < 30; k.pal = pickSquidPal(s); /* 3 visits in 10 it does not reach at all */ k.maxTries = 1 + nextRandom(s) % 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; } }
+        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
       return evadeTgt;
     }
     if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
@@ -337,7 +337,7 @@ const FV = (() => {
   const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(k, now) + SQ_NECK[1] * DOT];
   const SQ_REACH_DOTS = 34;   // it goes for the fighter when it is this close (dots) to the neck
   const squidPick = (dxd, dyd) => (dyd < -13 && Math.abs(dxd) <= 12 ? 0 : dxd < 0 ? 1 : 2);
-  const squidNear = (dxd, dyd, k) => Math.hypot(dxd, dyd) <= SQ_REACH_DOTS && dxd >= -SQ_REACH_DOTS && dxd <= 8 && k.x < W - KW - 6;
+  const squidNear = (dxd, dyd, k) => Math.hypot(dxd, dyd) <= SQ_REACH_DOTS && Math.abs(dxd) <= SQ_REACH_DOTS && k.x < W - KW - 6;
   function squidStart(s, k, shipCx, shipCy, nx, ny) {
     k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.tries++;
     k.sc = squidPick((shipCx - nx) / DOT, (shipCy - ny) / DOT);
@@ -351,8 +351,11 @@ const FV = (() => {
     k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
     k.rise += ((shipCx < Math.round(k.x) + SQ_NECK[0] * DOT ? 1 : 0) - k.rise) * (1 - Math.exp(-dt / 1.0));   // slowly up while the fighter is to its left, slowly down once it has passed
     const [nx, ny] = squidNeck(k, now), dxd = (shipCx - nx) / DOT, dyd = (shipCy - ny) / DOT;
-    if (k.ph === K_WALK) {
-      if (!k.noReach && k.tries < k.maxTries && squidNear(dxd, dyd, k)) squidStart(s, k, shipCx, shipCy, nx, ny);
+    if (k.ph === K_WALK || (k.ph === K_LEAVE && k.t >= 0.6)) {   // (once the tentacles are back from a reach, it may reach again)
+      if (squidNear(dxd, dyd, k)) {
+        if (dxd < 4 && k.doPre && !k.preDone) { k.preDone = true; squidStart(s, k, shipCx, shipCy, nx, ny); }       // the fighter is still ahead of it
+        else if (dxd >= 4 && k.doPost && !k.postDone) { k.postDone = true; squidStart(s, k, shipCx, shipCy, nx, ny); }   // the fighter has passed
+      }
     } else if (k.ph === K_REACH) { if (k.t >= K_DUR[K_REACH]) { k.ph = K_GRAB; k.t = 0; } }
     else if (k.ph === K_GRAB) {
       evade = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;                    // the fighter slips out of the closing ring
@@ -360,13 +363,8 @@ const FV = (() => {
     } else if (k.ph === K_MISS) {
       evade = shipCy > 52 ? -K_EVADE_PX : K_EVADE_PX;
       if (k.t >= K_DUR[K_MISS]) {
-        k.ph = K_LEAVE; k.t = 0; k.face = "calm";                         // the tentacles are drawn back; then, maybe, once more
-        k.nextAct = k.tries >= k.maxTries ? 0 : nextRandom(s) % 100 < 45 ? 1 : 0;
-        k.nextAt = K_GAP_MIN + (nextRandom(s) % 1000) / 1000 * K_GAP_VAR;
+        k.ph = K_LEAVE; k.t = 0; k.face = "calm";                         // the tentacles are drawn back
       }
-    } else if (k.ph === K_LEAVE && k.nextAct && k.t >= k.nextAt) {
-      k.nextAct = 0;
-      if (squidNear(dxd, dyd, k)) squidStart(s, k, shipCx, shipCy, nx, ny);
     }
     if (k.x < -KW - 4) { k.ph = K_IDLE; k.nextMs = now + (/squid=/.test(location.search) ? 2500 : KONG_MS_MIN + nextRandom(s) % (KONG_MS_MAX - KONG_MS_MIN)); }   // ?squid=1 for a quick look: one visit after another
     return evade;
