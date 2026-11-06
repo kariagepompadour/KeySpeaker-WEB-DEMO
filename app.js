@@ -461,27 +461,14 @@ const FV = (() => {
     const fx = shipX(now) + Math.round(s.lunge), fy = Math.round(s.shipY + bobY(now) + s.evadeCur);   // where the fighter is drawn
     for (const l of s.lights) {
       const a = l.a, sn = Math.sin(a), cs = Math.cos(a), side = l.x < midX ? -1 : 1;   // which side of the monster the light stands on
-      let hx = 0, hy = 0, hit = false, onShip = false;
+      
       for (let t = 0; t < LIGHT_LEN; t += DOT) {
         const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
-        if (monsterAt(kk, now, cx, y) && (cx - midX) * side <= 0) { hit = true; hx = cx; hy = y; break; }   // the light runs on over the monster up to its centre line, and stops there
-        if (cx >= fx && cx < fx + SHIP_W && y >= fy && y < fy + SHIP_H) { hit = true; hx = cx; hy = y; onShip = true; break; }   // it stops on the fighter too
+        if (monsterAt(kk, now, cx, y) && (cx - midX) * side <= 0) break;   // the light runs on over the monster up to its centre line, and stops there
+        if (cx >= fx && cx < fx + SHIP_W && y >= fy && y < fy + SHIP_H) break;   // it stops on the fighter too
         for (let j = -hw; j <= hw; j++) {
           const k = Math.pow(Math.max(0, fade), 0.6) * (Math.abs(j) === hw ? 0.5 : 1) * 0.95;
           addDot(DOT * Math.round((cx + j * DOT) / DOT), DOT * Math.round(y / DOT), Math.round(150 * k), Math.round(190 * k), Math.round(255 * k));
-        }
-      }
-      if (hit && onShip) {   // on the fighter: a bright burst around the point, showing round the hull
-        const gx = DOT * Math.round(hx / DOT), gy = DOT * Math.round(hy / DOT);
-        for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-2, 0], [2, 0]]) addDot(gx + dx * DOT, gy + dy * DOT, 200, 225, 255);
-      } else if (hit) {   // where it meets the monster: a bright patch on the monster's skin
-        const gx = DOT * Math.round(hx / DOT), gy = DOT * Math.round(hy / DOT);
-        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-          const d = Math.hypot(dx, dy); if (d > 2.3) continue;
-          const px_ = gx + dx * DOT, py_ = gy + dy * DOT;
-          if (d > 0.5 && !monsterAt(kk, now, px_ + 1, py_ + 1)) continue;   // only on the monster itself, around the contact
-          const g = 1 - d / 3;
-          addDot(px_, py_, Math.round(170 * g), Math.round(205 * g), Math.round(255 * g));
         }
       }
     }
