@@ -315,11 +315,11 @@ const FV = (() => {
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   const SQ_SC = [
-    { 0: { d1: [-18, -4], d2: [-3, 5], o: [-15, -3] }, 4: { d1: [13, 1], d2: [-6, -4], o: [19, 27] } },   // fighter above it: one tentacle up beside the head, the other low and out to the side, like "Shay!" (never meeting, never a ring)
+    { 0: { d1: [-20, -2], d2: [-6, 4], o: [-6, -3] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-5, 3] } },   // fighter above it, on its left: both tentacles go up the left side toward it, one a little higher than the other
     { 0: { d1: [-8, 5], d2: [6, 0], o: [-2, 0] }, 1: { d1: [-8, 9], d2: [6, -2], o: [-3, 3] } },
     { 4: { d1: [8, 5], d2: [-6, 0], o: [2, 0] }, 3: { d1: [8, 9], d2: [-6, -2], o: [3, 3] } },
   ];
-  const SQ_OVER_FLIP = { 0: { d1: [-13, 1], d2: [6, -4], o: [-19, 27] }, 4: { d1: [18, -4], d2: [3, 5], o: [15, -3] } };   // the same, the other way round
+  const SQ_OVER_FLIP = { 4: { d1: [20, -2], d2: [6, 4], o: [6, -3] }, 3: { d1: [16, 2], d2: [6, 5], o: [5, 3] } };   // the same, up the right side   // the same, the other way round
   const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
   const squidTop = now => H - KH - 4 + Math.round(Math.sin(now * 0.003) * 3);   // it floats: a slow bob
@@ -330,8 +330,9 @@ const FV = (() => {
   function squidStart(s, k, shipCx, shipCy, nx, ny) {
     k.ph = K_REACH; k.t = 0; k.tx = shipCx; k.ty = shipCy; k.face = "reach"; k.tries++;
     k.sc = squidPick((shipCx - nx) / DOT, (shipCy - ny) / DOT);
-    k.flip = nextRandom(s) % 2;
-    k.legs = Object.keys(SQ_SC[k.sc]).map(Number);
+    const dxd = (shipCx - nx) / DOT;
+    k.flip = Math.abs(dxd) < 4 ? nextRandom(s) % 2 : dxd < 0 ? 0 : 1;   // fighter above: the tentacles go up the side it is on
+    k.legs = Object.keys(k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc]).map(Number);
   }
   function updateSquid(s, now, dt, shipCx, shipCy) {
     const k = s.k; let evade = 0;
