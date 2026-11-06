@@ -372,14 +372,22 @@ const FV = (() => {
   }
   const bez3 = (p, u) => { const a = (1 - u) ** 3, b = 3 * u * (1 - u) ** 2, c = 3 * u * u * (1 - u), d = u ** 3; return [a * p[0][0] + b * p[1][0] + c * p[2][0] + d * p[3][0], a * p[0][1] + b * p[1][1] + c * p[2][1] + d * p[3][1]]; };
   // one tentacle: 4 dots thick, then 3, then a 2 dot tip; the lit edge on its left; drawn on the body's own dot grid (gx, gy)
+  const mixc = (a, b, t) => rgb(Math.round((a & 255) * (1 - t) + (b & 255) * t), Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t), Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t));
   function drawSquidLeg(p, gx, gy) {
+    const lit = KC.armEdge, dark = KC.arm, mid = mixc(lit, dark, 0.55);   // three tones: a lit edge, a half tone, and the dark; now and then a dot falls into shadow
     const len = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) + Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]) + Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]);
     const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
     for (let i = 0; i <= steps; i++) {
       const u = i / steps, [x, y] = bez3(p, u), w = u < 0.35 ? 4 : u < 0.7 ? 3 : 2;
       const [x1, y1] = bez3(p, Math.min(1, u + 0.02)), [x0, y0] = bez3(p, Math.max(0, u - 0.02)), flat = Math.abs(x1 - x0) > Math.abs(y1 - y0);   // going sideways: the thickness is across, in y
       const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
-      for (let j = w - 1; j >= 0; j--) { const o = (j - (w >> 1)) * DOT; dot(flat ? cx : cx + o, flat ? cy + o : cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm); }
+      for (let j = w - 1; j >= 0; j--) {
+        const o = (j - (w >> 1)) * DOT, px_ = flat ? cx : cx + o, py_ = flat ? cy + o : cy;
+        let col = j === 0 ? lit : j === 1 && w > 2 ? mid : dark;
+        const h = (Math.imul(Math.round((px_ - gx) / DOT), 73856093) ^ Math.imul(Math.round((py_ - gy) / DOT), 19349663)) >>> 0;
+        if (h % 5 === 0 && col !== dark) col = col === lit ? mid : dark;   // a fleck of shadow here and there
+        dot(px_, py_, col);
+      }
     }
   }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, in front of everything
