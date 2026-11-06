@@ -17,6 +17,8 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
   terrain and reaches for the fighter with a clawed hand, drawn in front of everything, and misses. Half of the visits are
   a second monster instead, a Space Invaders squid: a pointed head over seven tentacles that float in and stretch out
   toward the fighter, before it passes and again after it has passed, now and then.
+  And now and then searchlights stand on the ground, each with a small base, flow by with the terrain and sweep the sky with a slim beam
+  (a city on alert); a beam stops at a monster's centre line and on the fighter.
 - **Keyboard (text input) mode**: the spinning Earth with "KEY BOARD", Mac/Win and A/あ, the cheat sheet, and the
   MOUSE screen while G0 is held.
 - **Help screen**, with the device's own key list.
