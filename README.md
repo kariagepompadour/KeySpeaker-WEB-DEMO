@@ -52,6 +52,7 @@ buttons only: the device has no such keys.
 | `v` | measure / flight |
 | `h`, or any key with no job | help screen |
 | `Fn+M` | next mode |
+| `Fn+I` | input: USB sound ⇄ microphone (here: the same as MIC START) |
 | `Fn+O` | Mac / Win |
 | `Fn+A` | AUX on / off (display only) |
 | `Fn+[` `Fn+]` | input A / あ (keyboard mode) |

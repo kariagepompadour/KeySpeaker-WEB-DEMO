@@ -870,6 +870,7 @@ function drawKeys(now) {
   Earth.draw(now, COL_FG, ui.airOn);
   let x = 4;
   drawString("USB", x, 99, COL_OK);
+  if (A.src === "mic") drawString("MIC", x, 90, COL_OK);   // the microphone is the input (the device: bottom left corner, above the connection)
   x += textWidth("USB") + 6;
   drawString(ui.osWin ? "Win" : "Mac", x, 99, COL_FG);
   x += 24;
@@ -898,6 +899,8 @@ function drawKeys(now) {
     drawString("let go of G0: keys", 110, 125, COL_DIM);
   } else {
     drawHelp("Fn+M", "mode", sx, y, mx);
+    y += 9;
+    drawHelp("Fn+I", "USB/MIC", sx, y, mx);
     y += 12;
     for (const h of SHEET) { drawHelp(h[0], h[1], sx, y, mx); y += 9; }
     y += 3;
@@ -1212,7 +1215,7 @@ const toggleFull = () => { document.fullscreenElement ? document.exitFullscreen(
 
 /* ================= keys: exactly the device's own (Fn = Shift on a computer) ================= */
 const LABEL = { BracketLeft: "[", BracketRight: "]", Backslash: "\\", Space: " ", Comma: ",", Slash: "/", Minus: "-", Equal: "=",
-                KeyB: "b", KeyR: "r", KeyV: "v", KeyH: "h", KeyM: "m", KeyO: "o", KeyA: "a" };
+                KeyB: "b", KeyR: "r", KeyV: "v", KeyH: "h", KeyM: "m", KeyO: "o", KeyA: "a", KeyI: "i" };
 function setMode(m) {
   ui.mode = m; ui.helpOn = false; ui.airOn = false; ui.lastScreen = 0;
   try { localStorage.setItem("ks_mode", String(m)); } catch (e) {}
@@ -1227,6 +1230,7 @@ function onKey(code, fn) {
     else if (keysMode && (c === "[" || c === "]")) ui.inputKana = c === "]" ? 1 : 0;
     else if (c === "o") { ui.osWin = !ui.osWin; acted = true; }
     else if (c === "a") { ui.groveAux = !ui.groveAux; acted = true; }
+    else if (c === "i") { toggleMic(); acted = true; }   // the device: USB sound <-> the built-in microphone (here: MIC START)
   } else if (keysMode) acted = true;                   // on the device these go to the computer
   else switch (c) {
     case "[": ui.volDb = Math.max(VOL_MIN_DB, ui.volDb - 2); ui.muted = false; acted = true; break;
