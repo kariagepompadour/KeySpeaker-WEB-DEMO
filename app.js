@@ -310,7 +310,7 @@ const FV = (() => {
   const SQ_BASE = SQ_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
     const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
-    if (SQ_MOUTH && ((r === 12 && c >= 8 && c <= 14) || (r === 13 && (c === 7 || c === 15)))) return "M";   // a flat, grumpy mouth under the eyes, its corners turned down 
+    if (SQ_MOUTH && ((r === 12 && c >= 9 && c <= 13) || (r === 13 && (c === 8 || c === 14)))) return "M";   // a flat, grumpy mouth under the eyes, its corners turned down 
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
   const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_FLARE = [15, 11, 7, 3, 7, 11, 15], SQ_ENDX = [-14, -10, -6, 2, 6, 10, 14], SQ_ENDY = [-1, 2, -2, 2, -2, 2, -1];   // seen from above the tentacles lie out around the monster, like rays; seen from the side that is a spread to the left and right, with the ones that point toward us ending lower and the ones that point away ending higher (in dots, from the knee)
