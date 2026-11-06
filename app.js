@@ -311,7 +311,7 @@ const FV = (() => {
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-4.5, -3, -1.5, 0, 1.5, 3, 4.5], SQ_CRAWL = [32, 26, 20, 10, 20, 26, 32], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1], SQ_LIFT = [0, 1, 2, 3, 2, 1, 0];   // straight down, then a sharp knee and out along the ground: how far, to which side, and how many dots above the ground it lies (so the lines stack like steps)
+  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_CRAWL = [32, 26, 20, 10, 20, 26, 32], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1], SQ_LIFT = [0, 1, 2, 3, 2, 1, 0];   // straight down, then a sharp knee and out along the ground: how far, to which side, and how many dots above the ground it lies (so the lines stack like steps)
   const SQ_UNUSED = 0;   // seven roots along a 6 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
@@ -378,7 +378,7 @@ const FV = (() => {
     const len = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) + Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]) + Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]);
     const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
     for (let i = 0; i <= steps; i++) {
-      const u = i / steps, [x, y] = bez3(p, u), w = rest ? (u < 0.93 ? 2 : 1) : u < 0.3 ? 4 : u < 0.5 ? 3 : u < 0.8 ? 2 : 1;   // resting tentacles are slim, two dots, so they do not read as one trunk
+      const u = i / steps, [x, y] = bez3(p, u), w = rest ? (u < 0.45 ? 3 : u < 0.93 ? 2 : 1) : u < 0.3 ? 4 : u < 0.5 ? 3 : u < 0.8 ? 2 : 1;   // resting tentacles: three dots where they hang (packed together, no gaps), two along the ground
       const [x1, y1] = bez3(p, Math.min(1, u + 0.02)), [x0, y0] = bez3(p, Math.max(0, u - 0.02)), flat = Math.abs(x1 - x0) > Math.abs(y1 - y0);   // going sideways: the thickness is across, in y
       const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
       for (let j = w - 1; j >= 0; j--) {
