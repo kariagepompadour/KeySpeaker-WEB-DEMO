@@ -311,7 +311,8 @@ const FV = (() => {
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-6, -4, -2, 0, 2, 4, 6], SQ_ANG = [-14, -9, -4, 0, 4, 9, 14], SQ_LEN = [13, 14, 15, 15, 15, 14, 13];   // seven roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
+  const SQ_NECK = [11, 15], SQ_ROOT = [-6, -4, -2, 0, 2, 4, 6], SQ_CRAWL = [12, 9, 6, 0, 6, 9, 12], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1];   // how far each tentacle trails along the ground, and to which side
+  const SQ_UNUSED = 0;   // seven roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   // Four tentacles reach, never a pair that meets: the two on the fighter's side go to it, and the two on the other side stretch the same
@@ -390,8 +391,9 @@ const FV = (() => {
         for (let i = 0; i < 7; i++) {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
-      const a = SQ_ANG[i] * Math.PI / 180, L = SQ_LEN[i], R0 = [nx + SQ_ROOT[i] * DOT, ny], p2 = [R0[0] + L * Math.sin(a) * DOT, R0[1] + L * Math.cos(a) * DOT];
-      let p = [R0, [R0[0] + (L * 0.35 * Math.sin(a) + SQ_ROOT[i] * 0.15) * DOT, R0[1] + L * 0.4 * DOT], [p2[0] + Math.sin(a) * 3 * DOT, p2[1] - L * 0.35 * DOT], p2];   // at rest: hanging, fanned
+      const R0 = [nx + SQ_ROOT[i] * DOT, ny], gy = H - 2, drop = gy - ny, cr = SQ_CRAWL[i] * DOT, sg = SQ_DIR[i];
+      // at rest: down to the ground, where it bends and trails along it (the tips stay on the ground when the body rises)
+      let p = [R0, [R0[0] + sg * 0.1 * cr, ny + drop * 0.55], [R0[0] + sg * 0.35 * cr, gy - 2], [R0[0] + sg * cr, gy]];
       if (moving) {
         const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * DOT, T[1] + sc.o[1] * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
