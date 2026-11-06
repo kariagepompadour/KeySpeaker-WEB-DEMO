@@ -315,11 +315,11 @@ const FV = (() => {
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   const SQ_SC = [
-    { 0: { d1: [-23, -2], d2: [-14, -4], o: [-5, -3] }, 4: { d1: [23, 10], d2: [10, 4], o: [4, 4] } },   // over its head: one tentacle high, the other lower (never a symmetric "hooray")
+    { 0: { d1: [-23, -2], d2: [-12, -3], o: [-3, -3] }, 4: { d1: [23, 12], d2: [8, 6], o: [9, 5] } },   // over its head: one tentacle high, the other lower (never a symmetric "hooray")
     { 0: { d1: [-11, 7], d2: [0, 3], o: [6, 0] }, 1: { d1: [-9, 11], d2: [2, 4], o: [2, 4] } },
     { 4: { d1: [11, 0], d2: [0, -3], o: [-3, -4] }, 3: { d1: [7, 15], d2: [-2.4, 5], o: [-4.6, 3] } },
   ];
-  const SQ_OVER_FLIP = { 0: { d1: [-23, 10], d2: [-10, 4], o: [-4, 4] }, 4: { d1: [23, -2], d2: [14, -4], o: [5, -3] } };   // the same, the other way round
+  const SQ_OVER_FLIP = { 0: { d1: [-23, 12], d2: [-8, 6], o: [-9, 5] }, 4: { d1: [23, -2], d2: [12, -3], o: [3, -3] } };   // the same, the other way round
   const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
   const squidTop = now => H - KH - 4 + Math.round(Math.sin(now * 0.003) * 3);   // it floats: a slow bob
@@ -368,9 +368,9 @@ const FV = (() => {
       for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm);
     }
   }
-  // the tip: a short hook that flicks outward, away from the fighter, like an open claw (wk 0..1: how far it has grown)
+  // the tip: a short spike that flicks outward, away from the monster's body (ox, oy: that direction), like an open claw (wk 0..1: how far it has grown)
   function drawSquidHook(A, tx, ty, ox, oy, wk, gx, gy) {
-    const q = [A, [A[0] + tx * 3 * DOT * wk, A[1] + ty * 3 * DOT * wk], [A[0] + (tx * 3 + ox * 3) * DOT * wk, A[1] + (ty * 3 + oy * 3) * DOT * wk], [A[0] + (tx * 1.5 + ox * 5) * DOT * wk, A[1] + (ty * 1.5 + oy * 5) * DOT * wk]];
+    const q = [A, [A[0] + (tx * 1.5 + ox * 1.5) * DOT * wk, A[1] + (ty * 1.5 + oy * 1.5) * DOT * wk], [A[0] + ox * 4 * DOT * wk, A[1] + oy * 4 * DOT * wk], [A[0] + ox * 7 * DOT * wk, A[1] + oy * 7 * DOT * wk]];
     const steps = Math.max(6, Math.ceil(12 * wk));
     for (let i = 0; i <= steps; i++) {
       const u = i / steps, [x, y] = bez3(q, u), w = u < 0.6 ? 2 : 1;
@@ -397,8 +397,8 @@ const FV = (() => {
       }
       drawSquidLeg(p, bx, by);
       if (moving) {
-        const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], tl = Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]) || 1, ol = Math.hypot(sc.o[0], sc.o[1]) || 1;
-        drawSquidHook(p[3], (p[3][0] - p[2][0]) / tl, (p[3][1] - p[2][1]) / tl, sc.o[0] / ol, sc.o[1] / ol, w, bx, by);
+        const tl = Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]) || 1, ol = Math.hypot(p[3][0] - nx, p[3][1] - ny) || 1;   // outward = away from the neck, not toward it
+        drawSquidHook(p[3], (p[3][0] - p[2][0]) / tl, (p[3][1] - p[2][1]) / tl, (p[3][0] - nx) / ol, (p[3][1] - ny) / ol, w, bx, by);
       }
     }
     if (front && (k.ph === K_GRAB && k.t > K_DUR[K_GRAB] * 0.6 || k.ph === K_MISS && k.t < 0.25)) {   // the smash: a small burst where the tips come down
