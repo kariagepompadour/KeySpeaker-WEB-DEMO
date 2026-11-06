@@ -440,14 +440,34 @@ const FV = (() => {
       fb[i] = ((255 << 24) | (Math.min(255, ((c >> 16) & 255) + b) << 16) | (Math.min(255, ((c >> 8) & 255) + g) << 8) | Math.min(255, (c & 255) + r)) >>> 0;
     }
   }
+  // Is there a part of the monster at the screen point x, y? The ape's silhouette or the squid's head (the tentacles let light through).
+  function monsterAt(k, now, x, y) {
+    if (k.ph === K_IDLE) return false;
+    const bx = Math.round(k.x), by = k.kind === 1 ? squidTop(k, now) : H - KH, c = Math.floor((x - bx) / DOT), r = Math.floor((y - by) / DOT);
+    const rows = k.kind === 1 ? SQ_BASE : KONG_BASE;
+    return r >= 0 && r < rows.length && c >= 0 && c < KONG_W && rows[r][c] !== ".";
+  }
   function renderLights(s, now) {
+    const kk = s.k;
     for (const l of s.lights) {
       const a = l.a, sn = Math.sin(a), cs = Math.cos(a);
+      let hx = 0, hy = 0, hit = false;
       for (let t = 0; t < LIGHT_LEN; t += DOT) {
         const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
+        if (monsterAt(kk, now, cx, y)) { hit = true; hx = cx - sn * DOT; hy = y + cs * DOT; break; }   // the monster stops the light
         for (let j = -hw; j <= hw; j++) {
           const k = Math.pow(Math.max(0, fade), 0.6) * (Math.abs(j) === hw ? 0.5 : 1) * 0.95;
           addDot(DOT * Math.round((cx + j * DOT) / DOT), DOT * Math.round(y / DOT), Math.round(150 * k), Math.round(190 * k), Math.round(255 * k));
+        }
+      }
+      if (hit) {   // where it meets the monster: a bright patch on the monster's skin
+        const gx = DOT * Math.round(hx / DOT), gy = DOT * Math.round(hy / DOT);
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+          const d = Math.hypot(dx, dy); if (d > 2.3) continue;
+          const px_ = gx + dx * DOT, py_ = gy + dy * DOT;
+          if (d > 0.5 && !monsterAt(kk, now, px_ + 1, py_ + 1)) continue;   // only on the monster itself, around the contact
+          const g = 1 - d / 3;
+          addDot(px_, py_, Math.round(170 * g), Math.round(205 * g), Math.round(255 * g));
         }
       }
     }
