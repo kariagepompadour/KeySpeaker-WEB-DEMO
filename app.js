@@ -311,7 +311,7 @@ const FV = (() => {
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-5.5, -2.75, 0, 2.75, 5.5], SQ_ANG = [-12, -6, 0, 6, 12], SQ_LEN = [13, 14, 15, 14, 13];   // five roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart
+  const SQ_NECK = [11, 15], SQ_ROOT = [-6, -4, -2, 0, 2, 4, 6], SQ_ANG = [-14, -9, -4, 0, 4, 9, 14], SQ_LEN = [13, 14, 15, 15, 15, 14, 13];   // seven roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   // Four tentacles reach, never a pair that meets: the two on the fighter's side go to it, and the two on the other side stretch the same
@@ -319,16 +319,16 @@ const FV = (() => {
   const SQ_SC = [
     {   // fighter above it, on its left: the left pair goes up the left side, the right pair up the right side, a little lower
       0: { d1: [-20, -2], d2: [-6, 4], o: [-6, -3] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-5, 3] },
-      4: { d1: [20, -2], d2: [6, 4], o: [7, 2] }, 3: { d1: [16, 2], d2: [6, 5], o: [6, 8] } },
+      6: { d1: [20, -2], d2: [6, 4], o: [7, 2] }, 5: { d1: [16, 2], d2: [6, 5], o: [6, 8] } },
     {   // ahead (left): the left pair reaches for the fighter, the right pair stretches the same way, beneath
       0: { d1: [-8, 5], d2: [6, 0], o: [-2, 0] }, 1: { d1: [-8, 9], d2: [6, -2], o: [-3, 3] },
-      4: { d1: [2, 12], d2: [8, 2], o: [-1, 6] }, 3: { d1: [0, 14], d2: [8, 4], o: [-2, 9] } },
+      6: { d1: [2, 12], d2: [8, 2], o: [-1, 6] }, 5: { d1: [0, 14], d2: [8, 4], o: [-2, 9] } },
     {   // behind (right)
-      4: { d1: [8, 5], d2: [-6, 0], o: [2, 0] }, 3: { d1: [8, 9], d2: [-6, -2], o: [3, 3] },
+      6: { d1: [8, 5], d2: [-6, 0], o: [2, 0] }, 5: { d1: [8, 9], d2: [-6, -2], o: [3, 3] },
       0: { d1: [-2, 12], d2: [-8, 2], o: [1, 6] }, 1: { d1: [0, 14], d2: [-8, 4], o: [2, 9] } },
   ];
   const SQ_OVER_FLIP = {   // fighter above it, on its right
-    4: { d1: [20, -2], d2: [6, 4], o: [6, -3] }, 3: { d1: [16, 2], d2: [6, 5], o: [5, 3] },
+    6: { d1: [20, -2], d2: [6, 4], o: [6, -3] }, 5: { d1: [16, 2], d2: [6, 5], o: [5, 3] },
     0: { d1: [-20, -2], d2: [-6, 4], o: [-7, 2] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-6, 8] } };
   const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
@@ -386,7 +386,7 @@ const FV = (() => {
     const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
     const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
     const w = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : reaching ? 1 : k.ph === K_LEAVE && k.tx ? 1 - ease3(k.t / 0.5) : 0;   // 0 at rest ... 1 stretched out
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 7; i++) {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
       const a = SQ_ANG[i] * Math.PI / 180, L = SQ_LEN[i], R0 = [nx + SQ_ROOT[i] * DOT, ny], p2 = [R0[0] + L * Math.sin(a) * DOT, R0[1] + L * Math.cos(a) * DOT];
