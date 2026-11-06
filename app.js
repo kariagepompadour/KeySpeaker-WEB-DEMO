@@ -304,15 +304,15 @@ const FV = (() => {
   /* ---- SQUID (trial): the second big monster, a Space Invaders squid. A pointed bell of a head over one narrow neck, from which five
      tentacles fan out. It floats in with the terrain, and two of its tentacles stretch out together for the fighter (over its head, ahead
      of it or behind it), curl into a ring around it, and miss as the fighter slips away. 23 x 30 dots, like the ape. ---- */
-  const SQ_WID = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 23, 21, 17, 15];     // the head and the wide base under it: width of each row, centred
+  const SQ_WID = [3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 23, 19, 13, 11];     // the head and the wide base under it: width of each row, centred
   const SQ_EYES = { 9: [5, 6, 7, 8, 14, 15, 16, 17], 10: [7, 8, 9, 10, 12, 13, 14, 15] };   // slanted, the inner ends lower
   const SQ_BASE = SQ_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
     const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
     if (SQ_EYES[r] && SQ_EYES[r].includes(c)) return "E";
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
-  const SQ_NECK = [11, 15], SQ_ROOT = [-6, -4, -2, 0, 2, 4, 6], SQ_CRAWL = [10, 8, 6, 0, 6, 8, 10], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1];   // how far each tentacle trails along the ground, and to which side
-  const SQ_UNUSED = 0;   // seven roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
+  const SQ_NECK = [11, 15], SQ_ROOT = [-3, -2, -1, 0, 1, 2, 3], SQ_CRAWL = [8, 6, 4, 0, 4, 6, 8], SQ_DIR = [-1, -1, -1, 1, 1, 1, 1];   // how far each tentacle trails along the ground, and to which side
+  const SQ_UNUSED = 0;   // seven roots along a 6 dot base; at rest the tentacles hang down, only slightly apart. When it reaches, the outer two on each side stretch and the middle three still hold it up
     // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   // Four tentacles reach, never a pair that meets: the two on the fighter's side go to it, and the two on the other side stretch the same
@@ -393,8 +393,8 @@ const FV = (() => {
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
       const R0 = [nx + SQ_ROOT[i] * DOT, ny], gy = H - 2, drop = gy - ny, cr = SQ_CRAWL[i] * DOT, sg = SQ_DIR[i];
       // at rest: hanging straight down to the ground, where it is bent like a knee and lies along it (the tips stay on the ground when the body rises)
-      const xv = R0[0] + SQ_ROOT[i] * 0.7 * DOT;   // they drift apart a little on the way down
-      let p = [R0, [R0[0] + SQ_ROOT[i] * 0.3 * DOT, ny + drop * 0.5], [xv, gy - 3], [xv + sg * cr, gy]];   // down, then folded: the last part lies flat on the ground
+      const xv = R0[0] + SQ_ROOT[i] * 1.2 * DOT;   // they drift apart a little on the way down
+      let p = [R0, [R0[0] + SQ_ROOT[i] * 0.5 * DOT, ny + drop * 0.5], [xv, gy - 3], [xv + sg * cr, gy]];   // down, then folded: the last part lies flat on the ground
       if (moving) {
         const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * DOT, T[1] + sc.o[1] * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
