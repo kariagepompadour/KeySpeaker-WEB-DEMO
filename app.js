@@ -149,7 +149,7 @@ const FV = (() => {
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
         k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
         k.kind = forcedKind(s);
-        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = nextRandom(s) % 100 < 8; k.pal = pickSquidPal(s); k.maxTries = 1 + nextRandom(s) % 2; k.sc = 0; k.legs = [0, 0]; } }
+        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = nextRandom(s) % 100 < 30; k.pal = pickSquidPal(s); /* 3 visits in 10 it does not reach at all */ k.maxTries = 1 + nextRandom(s) % 2; k.sc = 0; k.legs = [0, 0]; } }
       return evadeTgt;
     }
     if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
