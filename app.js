@@ -448,13 +448,13 @@ const FV = (() => {
     return r >= 0 && r < rows.length && c >= 0 && c < KONG_W && rows[r][c] !== ".";
   }
   function renderLights(s, now) {
-    const kk = s.k;
+    const kk = s.k, midX = Math.round(kk.x) + KONG_W * DOT / 2;   // the monster's centre line
     for (const l of s.lights) {
-      const a = l.a, sn = Math.sin(a), cs = Math.cos(a);
+      const a = l.a, sn = Math.sin(a), cs = Math.cos(a), side = l.x < midX ? -1 : 1;   // which side of the monster the light stands on
       let hx = 0, hy = 0, hit = false;
       for (let t = 0; t < LIGHT_LEN; t += DOT) {
         const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
-        if (monsterAt(kk, now, cx, y)) { hit = true; hx = cx - sn * DOT; hy = y + cs * DOT; break; }   // the monster stops the light
+        if (monsterAt(kk, now, cx, y) && (cx - midX) * side <= 0) { hit = true; hx = cx; hy = y; break; }   // the light runs on over the monster up to its centre line, and stops there
         for (let j = -hw; j <= hw; j++) {
           const k = Math.pow(Math.max(0, fade), 0.6) * (Math.abs(j) === hw ? 0.5 : 1) * 0.95;
           addDot(DOT * Math.round((cx + j * DOT) / DOT), DOT * Math.round(y / DOT), Math.round(150 * k), Math.round(190 * k), Math.round(255 * k));
