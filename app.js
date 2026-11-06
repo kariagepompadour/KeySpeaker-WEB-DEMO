@@ -312,8 +312,7 @@ const FV = (() => {
     const a = SQ_WID[r] ? (c - m < 2 ? "B" : "K") : "K"; return a;   // a lit band two dots wide along the left edge
   }));
   const SQ_NECK = [11, 15], SQ_ROOT = [-5.5, -2.75, 0, 2.75, 5.5], SQ_ANG = [-12, -6, 0, 6, 12], SQ_LEN = [13, 14, 15, 14, 13];   // five roots spread along a 14 dot base; at rest the tentacles hang down, only slightly apart
-  const SQ_RING_RX = 6, SQ_RING_RY = 4.5;
-  // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
+    // how the two reaching tentacles go, for the fighter over its head / ahead of it / behind it: per tentacle the first control point's
   // offset from the neck (d1), the second one's offset from the tip (d2) and where on the ring the tip lands (o), all in dots
   const SQ_SC = [
     { 0: { d1: [-23, -2], d2: [-14, -4], o: [-5, -3] }, 4: { d1: [23, 10], d2: [10, 4], o: [4, 4] } },   // over its head: one tentacle high, the other lower (never a symmetric "hooray")
@@ -385,7 +384,7 @@ const FV = (() => {
     const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
     const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
     const w = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : reaching ? 1 : k.ph === K_LEAVE && k.tx ? 1 - ease3(k.t / 0.5) : 0;   // 0 at rest ... 1 stretched out
-    const ringScale = k.ph === K_GRAB ? 1 - 0.45 * ease3(k.t / K_DUR[K_GRAB]) : k.ph === K_MISS ? 0.55 : 1;
+    const ringScale = k.ph === K_GRAB ? 0.5 - 0.4 * ease3(k.t / K_DUR[K_GRAB]) : k.ph === K_MISS ? 0.1 : 0.5;   // how far from the fighter the tips stay: they come down onto it in the strike
     for (let i = 0; i < 5; i++) {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
@@ -402,8 +401,9 @@ const FV = (() => {
         drawSquidHook(p[3], (p[3][0] - p[2][0]) / tl, (p[3][1] - p[2][1]) / tl, sc.o[0] / ol, sc.o[1] / ol, w, bx, by);
       }
     }
-    if (front && reaching && w >= 0.9 && k.ph !== K_REACH) {   // the ring that closes around the fighter
-      for (let a = 0; a < 6.28; a += 0.28) dot(bx + DOT * Math.round((k.tx + SQ_RING_RX * ringScale * DOT * Math.cos(a) - bx) / DOT), by + DOT * Math.round((k.ty + SQ_RING_RY * ringScale * DOT * Math.sin(a) - by) / DOT), KC.armEdge);
+    if (front && (k.ph === K_GRAB && k.t > K_DUR[K_GRAB] * 0.6 || k.ph === K_MISS && k.t < 0.25)) {   // the smash: a small burst where the tips come down
+      const hx = bx + DOT * Math.round((k.tx - bx) / DOT), hy = by + DOT * Math.round((k.ty - by) / DOT);
+      for (const [dx, dy] of [[0, 0], [-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]]) dot(hx + dx * DOT, hy + dy * DOT, k.ph === K_MISS || (dx === 0 && dy === 0) ? KC.E : KC.armEdge);
     }
   }
 
