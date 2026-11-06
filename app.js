@@ -414,11 +414,46 @@ const FV = (() => {
     }
   }
 
+  /* ---- SEARCHLIGHTS (trial): a city on alert. Searchlights stand on the ground, hidden behind the terrain bars, and flow from right to left
+     with the terrain (30 px/s), each sweeping the sky with a slim beam that widens and fades toward the top. A few at a time, only while
+     music plays (the ones already there carry on). Drawn behind the monsters and the terrain, added to the stars' light. ---- */
+  const MAX_LIGHTS = 3, LIGHT_MS_MIN = 3500, LIGHT_MS_MAX = 8000, LIGHT_LEN = 150;
+  const lightsNow = () => typeof location !== "undefined" && /lights=now/.test(location.search);   // ?lights=now: one at once, music or not
+  function updateLights(s, now, dt) {
+    if (s.nextLightMs === 0) s.nextLightMs = now + (lightsNow() ? 300 : 2500);
+    for (const l of s.lights) l.x -= SCROLL_PX_S * dt;
+    s.lights = s.lights.filter(l => l.x > -LIGHT_LEN);
+    if ((s.prevDb > DB_SILENT || lightsNow()) && s.lights.length < MAX_LIGHTS && now - s.nextLightMs >= 0) {
+      const d = Math.PI / 180;
+      s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100 });
+      s.nextLightMs = now + LIGHT_MS_MIN + nextRandom(s) % (LIGHT_MS_MAX - LIGHT_MS_MIN);
+    }
+  }
+  function addDot(x, y, r, g, b) {   // a 3 x 3 dot, its light added to what is behind it (the stars show through)
+    for (let dy = 0; dy < DOT; dy++) for (let dx = 0; dx < DOT; dx++) {
+      const xx = x + dx, yy = y + dy; if (xx < 0 || xx >= W || yy < 0 || yy >= H) continue;
+      const i = yy * W + xx, c = fb[i];
+      fb[i] = ((255 << 24) | (Math.min(255, ((c >> 16) & 255) + b) << 16) | (Math.min(255, ((c >> 8) & 255) + g) << 8) | Math.min(255, (c & 255) + r)) >>> 0;
+    }
+  }
+  function renderLights(s, now) {
+    for (const l of s.lights) {
+      const a = l.base + l.amp * Math.sin(now * 0.001 * l.w + l.ph), sn = Math.sin(a), cs = Math.cos(a);
+      for (let t = 0; t < LIGHT_LEN; t += DOT) {
+        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
+        for (let j = -hw; j <= hw; j++) {
+          const k = Math.pow(fade, 0.6) * (Math.abs(j) === hw ? 0.5 : 1) * 0.95;
+          addDot(DOT * Math.round((cx + j * DOT) / DOT), DOT * Math.round(y / DOT), Math.round(150 * k), Math.round(190 * k), Math.round(255 * k));
+        }
+      }
+    }
+  }
+
   const newEnemy = () => ({ x: 0, y: 0, baseY: 0, phase: 0, mineMs: 0, kind: WALKER, on: false, fireMs: 0, born: MAT_S });
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0,
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0,
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
     eb: Array.from({ length: MAX_EBULLETS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
@@ -474,7 +509,7 @@ const FV = (() => {
     s.nextFireMs = nowMs + FIRE_MS_MIN; s.avgSet = false; s.nextBombMs = nowMs + BOMB_MS_MIN / 2;
     for (const a of [s.m, s.b, s.x, s.e, s.mine, s.eb]) for (const o of a) o.on = false;
     s.shieldUntil = nowMs; s.dodging = false; s.beat = false; s.lunge = 0;
-    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0;
+    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0;
     s.eq = false; s.pattern = s.next = 0; s.scale = 0; s.fade = 0;
     s.modeSinceMs = s.silentSinceMs = nowMs; s.wasSilent = false; s.eqFresh = false; s.eqAvgSet = false;
     s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0);
@@ -640,6 +675,7 @@ const FV = (() => {
     if (!threat) s.dodging = false;
     if (target < TOP + 4) target = TOP + 4;
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
+    updateLights(s, now, dt);
     const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
@@ -807,6 +843,7 @@ const FV = (() => {
       px(x, y, c);
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
     }
+    renderLights(s, now);                                  // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
     for (let i = 0; i < COLS; i++) {
       const x0 = colX(i, off), h = s.h[i];
