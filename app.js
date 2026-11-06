@@ -369,6 +369,16 @@ const FV = (() => {
       for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j <= (w > 3 ? 1 : 0) ? KC.armEdge : KC.arm);
     }
   }
+  // the tip: a short hook that flicks outward, away from the fighter, like an open claw (wk 0..1: how far it has grown)
+  function drawSquidHook(A, tx, ty, ox, oy, wk, gx, gy) {
+    const q = [A, [A[0] + tx * 3 * DOT * wk, A[1] + ty * 3 * DOT * wk], [A[0] + (tx * 3 + ox * 3) * DOT * wk, A[1] + (ty * 3 + oy * 3) * DOT * wk], [A[0] + (tx * 1.5 + ox * 5) * DOT * wk, A[1] + (ty * 1.5 + oy * 5) * DOT * wk]];
+    const steps = Math.max(6, Math.ceil(12 * wk));
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps, [x, y] = bez3(q, u), w = u < 0.6 ? 2 : 1;
+      const cx = gx + DOT * Math.round((x - gx) / DOT), cy = gy + DOT * Math.round((y - gy) / DOT);
+      for (let j = w - 1; j >= 0; j--) dot(cx + (j - (w >> 1)) * DOT, cy, j === 0 ? KC.armEdge : KC.arm);
+    }
+  }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, and the ring, in front of everything
     const k = s.k, bx = Math.round(k.x), by = squidTop(now);
     if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, KC[ch]); }
@@ -387,6 +397,10 @@ const FV = (() => {
         p = p.map((v, n) => [v[0] + (r[n][0] - v[0]) * w, v[1] + (r[n][1] - v[1]) * w]);
       }
       drawSquidLeg(p, bx, by);
+      if (moving) {
+        const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], tl = Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]) || 1, ol = Math.hypot(sc.o[0], sc.o[1]) || 1;
+        drawSquidHook(p[3], (p[3][0] - p[2][0]) / tl, (p[3][1] - p[2][1]) / tl, sc.o[0] / ol, sc.o[1] / ol, w, bx, by);
+      }
     }
     if (front && reaching && w >= 0.9 && k.ph !== K_REACH) {   // the ring that closes around the fighter
       for (let a = 0; a < 6.28; a += 0.28) dot(bx + DOT * Math.round((k.tx + SQ_RING_RX * ringScale * DOT * Math.cos(a) - bx) / DOT), by + DOT * Math.round((k.ty + SQ_RING_RY * ringScale * DOT * Math.sin(a) - by) / DOT), KC.armEdge);
