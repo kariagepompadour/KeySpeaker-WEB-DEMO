@@ -23,6 +23,8 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
   MOUSE screen while G0 is held.
 - **Help screen**, with the device's own key list.
 
+Meteor zone (trial): now and then the terrain sinks low and meteors stream from right to left while the fighter weaves through them. Add `?meteor=now` to the address to see one soon after start, then every 8 s.
+
 `Fn+M` cycles measure -> flight -> keyboard; the last mode is remembered (flight at first).
 
 ## Audio source

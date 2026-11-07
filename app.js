@@ -427,7 +427,7 @@ const FV = (() => {
       l.a = l.base + l.amp * Math.sin(now * 0.001 * l.w + l.ph);
     }
     s.lights = s.lights.filter(l => l.x > -LIGHT_LEN);
-    if ((s.prevDb > DB_SILENT || lightsNow()) && s.lights.length < MAX_LIGHTS && now - s.nextLightMs >= 0) {
+    if (!s.mz.ph && (s.prevDb > DB_SILENT || lightsNow()) && s.lights.length < MAX_LIGHTS && now - s.nextLightMs >= 0) {
       const d = Math.PI / 180;
       s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100, a: 0 });
       s.nextLightMs = now + LIGHT_MS_MIN + nextRandom(s) % (LIGHT_MS_MAX - LIGHT_MS_MIN);
@@ -474,11 +474,99 @@ const FV = (() => {
     }
   }
 
+  /* ---- METEOR ZONE (trial): now and then the targets, the monsters and the searchlights fall behind, the terrain sinks low, and meteors stream
+     from right to left while the fighter weaves through them without firing. The louder the music, the more meteors; a beat brings a big one. A
+     meteor is placed so that it misses the fighter's path, so the fighter always slips past. ?meteor=now: one soon after start, then every 8 s. ---- */
+  const MZ_IN_S = 1.5, MZ_RUN_S = 17, MZ_OUT_S = 2, MZ_FIRST_MS = 90000, MZ_MS_MIN = 120000, MZ_MS_MAX = 240000, MZ_SEG = 7, MZ_WARP_PX_S = 260;
+  const MZ_MAX = 40, MZ_DUST_MAX = 18, MZ_RATE_MIN = 3, MZ_RATE_MAX = 12, MZ_DUST_RATE = 14, MZ_GAP = 8;
+  const MZ_SIZE = [{ r: 2, vMin: 170, vMax: 240, tail: 6 }, { r: 4, vMin: 220, vMax: 300, tail: 10 }, { r: 6, vMin: 280, vMax: 360, tail: 15 }];
+  const meteorNow = () => typeof location !== "undefined" && /meteor=now/.test(location.search);
+  const mzTop = () => TOP + 6, mzBottom = () => H - MZ_SEG * SEG_PITCH - SHIP_H - 6;
+  const mzPath = (s, ms) => { const t = ms * 0.001 + s.mz.ph0, mid = (mzTop() + mzBottom()) / 2, a = (mzBottom() - mzTop()) / 2;
+    return mid + a * (0.62 * Math.sin(t * 1.1) + 0.38 * Math.sin(t * 2.3 + 1)); };
+  const mzHeight = (s, h) => s.mz.u > 0 ? Math.max(GROUND, Math.round(h * (1 - s.mz.u * (1 - MZ_SEG / NSEG)) / SEG_PITCH) * SEG_PITCH) : h;
+  function spawnMeteor(s, now, sx, size) {
+    if (s.met.length >= MZ_MAX) return;
+    const z = MZ_SIZE[size], v = z.vMin + nextRandom(s) % (z.vMax - z.vMin), vy = v * (0.04 + (nextRandom(s) % 12) / 100), tail = z.tail * DOT;
+    const arrive = (W + z.r - sx - SHIP_W) / v, leave = (W + z.r + tail - sx) / v, clear = SHIP_H / 2 + z.r + MZ_GAP;
+    for (let tries = 0; tries < 8; tries++) {
+      const y = TOP + nextRandom(s) % (H - MZ_SEG * SEG_PITCH - TOP - 6);
+      let ok = true;
+      for (let i = 0; i <= 5 && ok; i++) {
+        const t = arrive + (leave - arrive) * i / 5;
+        ok = Math.abs(y + vy * t - (mzPath(s, now + t * 1000) + SHIP_H / 2)) >= clear;
+      }
+      if (ok) { s.met.push({ x: W + z.r, y, v, vy, size, warm: size === 2 || nextRandom(s) % 100 < 55 }); return; }
+    }
+  }
+  function updateMeteorZone(s, now, dt, sx) {
+    const z = s.mz, k = s.k;
+    if (z.nextMs === 0) z.nextMs = now + (meteorNow() ? 1500 : MZ_FIRST_MS);
+    if (z.ph === 0) {
+      if (now - z.nextMs >= 0 && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
+        z.ph = 1; z.t = 0; z.acc = 0; z.dustAcc = 0; z.ph0 = (nextRandom(s) % 628) / 100;
+        k.nextMs = Math.max(k.nextMs, now + (MZ_IN_S + MZ_RUN_S + MZ_OUT_S) * 1000 + 8000);
+      }
+    }
+    if (z.ph === 0) return;
+    z.t += dt;
+    if (z.ph === 1) { z.u = Math.min(1, z.t / MZ_IN_S); if (z.t >= MZ_IN_S) { z.ph = 2; z.t = 0; } }
+    else if (z.ph === 2 && z.t >= MZ_RUN_S) { z.ph = 3; z.t = 0; }
+    else if (z.ph === 3) {
+      z.u = Math.max(0, 1 - z.t / MZ_OUT_S);
+      if (z.t >= MZ_OUT_S && s.met.length === 0) {
+        z.ph = 0; z.u = 0; s.nextLightMs = Math.max(s.nextLightMs, now + 6000);
+        z.nextMs = now + (meteorNow() ? 8000 : MZ_MS_MIN + nextRandom(s) % (MZ_MS_MAX - MZ_MS_MIN));
+      }
+    }
+    if (z.ph === 2) {
+      const level = s.prevDb <= DB_SILENT ? 0 : Math.min(1, Math.max(0, (s.prevDb - s.avgDb) / SPAN_DB + 0.5));
+      z.acc += dt * (MZ_RATE_MIN + (MZ_RATE_MAX - MZ_RATE_MIN) * level);
+      while (z.acc >= 1) { z.acc -= 1; spawnMeteor(s, now, sx, nextRandom(s) % 100 < 65 ? 0 : 1); }
+      if (s.beat) spawnMeteor(s, now, sx, 2);
+    }
+    s.beat = false;
+    z.dustAcc += dt * (z.ph === 3 ? 0 : MZ_DUST_RATE * z.u);
+    while (z.dustAcc >= 1) {
+      z.dustAcc -= 1;
+      if (s.dust.length < MZ_DUST_MAX) s.dust.push({ x: W + 8, y: TOP + nextRandom(s) % (H - TOP - MZ_SEG * SEG_PITCH), v: 340 + nextRandom(s) % 200, len: 10 + nextRandom(s) % 18 });
+    }
+    for (const m of s.met) { m.x -= m.v * dt; m.y += m.vy * dt; }
+    for (const d of s.dust) d.x -= d.v * dt;
+    s.met = s.met.filter(m => m.x > -MZ_SIZE[m.size].tail * DOT - 8);
+    s.dust = s.dust.filter(d => d.x > -d.len);
+    const w = MZ_WARP_PX_S * z.u * dt;   // whatever was on screen falls behind
+    for (const e of s.e) if (e.on) e.x -= w;
+    for (const b of s.eb) if (b.on) b.x -= w;
+    for (const m of s.mine) if (m.on) m.x -= w;
+    for (const l of s.lights) l.x -= w;
+  }
+  function renderMeteors(s) {
+    for (const d of s.dust) {
+      const x = Math.round(d.x), y = Math.round(d.y);
+      for (let i = 0; i < d.len; i += 2) { const f = 1 - i / d.len; px(x + i, y, rgb(Math.round(90 * f), Math.round(110 * f), Math.round(150 * f))); }
+    }
+    for (const m of s.met) {
+      const z = MZ_SIZE[m.size], gx = DOT * Math.round(m.x / DOT), gy = DOT * Math.round(m.y / DOT);
+      for (let i = z.tail; i >= 1; i--) {
+        const f = 1 - i / (z.tail + 1), slope = Math.round(-m.vy / m.v * i);
+        const rr = m.warm ? 255 : 70, gg = m.warm ? 70 + 150 * f : 150 + 80 * f, bb = m.warm ? 10 + 40 * f : 255;
+        addDot(gx + i * DOT, gy + slope * DOT, Math.round(rr * f), Math.round(gg * f), Math.round(bb * f));
+        if (m.size === 2 && i < z.tail * 0.6) { addDot(gx + i * DOT, gy + (slope - 1) * DOT, Math.round(rr * f * 0.5), Math.round(gg * f * 0.5), Math.round(bb * f * 0.5)); addDot(gx + i * DOT, gy + (slope + 1) * DOT, Math.round(rr * f * 0.5), Math.round(gg * f * 0.5), Math.round(bb * f * 0.5)); }
+      }
+      const hot = m.warm ? rgb(255, 214, 110) : rgb(150, 220, 255), core = rgb(255, 255, 235);
+      if (m.size === 0) dot(gx, gy, core);
+      else if (m.size === 1) { dot(gx, gy, core); dot(gx + DOT, gy, hot); dot(gx, gy - DOT, hot); dot(gx, gy + DOT, hot); }
+      else for (const [ox, oy, c] of [[0, 0, core], [-1, 0, core], [1, 0, core], [0, -1, core], [0, 1, core], [-1, -1, hot], [1, -1, hot], [-1, 1, hot], [1, 1, hot], [-2, 0, hot], [2, 0, hot], [0, -2, hot], [0, 2, hot]]) dot(gx + ox * DOT, gy + oy * DOT, c);
+    }
+  }
+
   const newEnemy = () => ({ x: 0, y: 0, baseY: 0, phase: 0, mineMs: 0, kind: WALKER, on: false, fireMs: 0, born: MAT_S });
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
     nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0,
+    mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
     eb: Array.from({ length: MAX_EBULLETS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
@@ -558,10 +646,10 @@ const FV = (() => {
   const colX = (i, off) => W - off - i * PITCH;
   const scrollOffset = (s, now) => Math.floor(Math.min(now - s.lastColMs, COL_MS) * PITCH / COL_MS);
   const colAt = (x, off) => { const d = W - off - x; return d < 0 ? -1 : Math.floor((d + PITCH - 1) / PITCH); };
-  const eqHeight = (s, j) => s.eq ? Math.round(s.eqH[j] * s.scale) * SEG_PITCH : 0;
+  const eqHeight = (s, j) => s.eq ? mzHeight(s, Math.round(s.eqH[j] * s.scale) * SEG_PITCH) : 0;
   function heightAt(s, x, off) {
     const i = colAt(x, off);
-    let h = i < 0 ? 0 : i < COLS ? s.h[i] : GROUND;
+    let h = i < 0 ? 0 : i < COLS ? mzHeight(s, s.h[i]) : GROUND;
     if (s.eq && x >= 0 && x < EQ_BANDS * PITCH) h = Math.max(h, eqHeight(s, Math.floor(x / PITCH)));
     return h;
   }
@@ -670,6 +758,7 @@ const FV = (() => {
 
     updateTurns(s, now, dt);
     if (s.eq) updateEq(s, dt);
+    updateMeteorZone(s, now, dt, sx);
 
     let tallest = GROUND;
     for (let x = sx; x < sx + SHIP_W + 60; x += 2) tallest = Math.max(tallest, heightAt(s, x, off));
@@ -699,6 +788,7 @@ const FV = (() => {
     }
     if (!threat) s.dodging = false;
     if (target < TOP + 4) target = TOP + 4;
+    if (s.mz.u > 0) { target += (mzPath(s, now) - target) * s.mz.u; ease = 0.05 + (ease - 0.05) * (1 - s.mz.u); }
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
     updateLights(s, now, dt);
     const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
@@ -771,7 +861,7 @@ const FV = (() => {
       if (m.age >= MINE_S || m.x < -DOT) m.on = false;
     }
     const music = s.prevDb > DB_SILENT;
-    if (s.beat || now - s.nextSpawnMs >= (music ? SPAWN_MS_MAX : SPAWN_MS_QUIET) - SPAWN_MS_MIN) {
+    if (!s.mz.ph && (s.beat || now - s.nextSpawnMs >= (music ? SPAWN_MS_MAX : SPAWN_MS_QUIET) - SPAWN_MS_MIN)) {
       s.beat = false;
       let targets = 0; for (const e of s.e) targets += e.on && e.kind !== SWARMER ? 1 : 0;
       if (targets < MAX_TARGETS && now - s.nextSpawnMs >= 0) {
@@ -805,10 +895,11 @@ const FV = (() => {
       if (x.age >= (x.pop ? POP_S : BURST_S) || x.x < -8) x.on = false;
     }
     for (const st of s.star) {
-      st.x -= (st.near ? STAR_NEAR_PX_S : STAR_FAR_PX_S) * dt;
+      st.x -= (st.near ? STAR_NEAR_PX_S : STAR_FAR_PX_S) * (1 + 9 * s.mz.u) * dt;
       if (st.x < -2) placeStar(s, st, W + 1);
     }
-    if (aim) {
+    if (s.mz.ph) {   // the fighter only weaves through
+    } else if (aim) {
       const nose = sy + 2 * DOT + Math.trunc(DOT / 2), mid = Math.trunc(aim.y) + Math.trunc(enemyH(aim) / 2);
       if (Math.abs(nose - mid) <= DOT && aim.x < ENGAGE_X && formed(aim) && now - s.nextAimMs >= 0) {
         s.nextAimMs = now + AIM_FIRE_MS; s.nextFireMs = now + interval(s, FIRE_MS_MIN, FIRE_MS_MAX);
@@ -818,7 +909,7 @@ const FV = (() => {
       s.nextFireMs = now + interval(s, FIRE_MS_MIN, FIRE_MS_MAX);
       fireLaser(s, sx, sy);
     }
-    if (now - s.nextBombMs >= 0) {
+    if (!s.mz.ph && now - s.nextBombMs >= 0) {
       s.nextBombMs = now + interval(s, BOMB_MS_MIN, BOMB_MS_MAX);
       for (const b of s.b) if (!b.on) { Object.assign(b, { x: sx + 3 * DOT, y: sy + SHIP_H, vx: BOMB_VX, vy: 0, on: true }); break; }
     }
@@ -867,11 +958,12 @@ const FV = (() => {
       const x = Math.trunc(st.x), y = st.y, c = C.star[st.kind];
       px(x, y, c);
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
+      for (let t = Math.round(s.mz.u * (st.near ? 10 : 4)); t > 0; t--) px(x + 1 + t, y, c);
     }
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
     for (let i = 0; i < COLS; i++) {
-      const x0 = colX(i, off), h = s.h[i];
+      const x0 = colX(i, off), h = mzHeight(s, s.h[i]);
       for (let dx = 0; dx < BAR_W; dx++) {
         const x = x0 + dx; if (x < 0 || x >= W) continue;
         for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = s.lit[k];
@@ -881,7 +973,7 @@ const FV = (() => {
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
-        let peak = s.scale >= 1 ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
+        let peak = s.scale >= 1 && !s.mz.u ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
         if (peak < h) peak = -1;
         for (let dx = 0; dx < BAR_W; dx++) {
           const x = x0 + dx;
@@ -911,6 +1003,7 @@ const FV = (() => {
     });
     s.mine.forEach((m, i) => { if (m.on) dot(Math.trunc(m.x), Math.trunc(m.y), ((Math.floor(now / 120) + i) & 1) ? C.ER : C.EE); });
     s.eb.forEach((b, i) => { if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), ((Math.floor(now / 80) + i) & 1) ? C.EB_A : C.EB_B); });
+    renderMeteors(s);
 
     for (const m of s.m) {
       if (!m.on) continue;
@@ -938,6 +1031,7 @@ const FV = (() => {
     }
     dot(sx - DOT, sy + 2 * DOT, C.F2);
     if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
+    if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
     renderLightBases(s);                                   // the searchlights' bases, on the ground
     renderKong(s, now, true);                              // both arms: in front of the terrain, the equalizer and the fighter
   }
