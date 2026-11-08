@@ -1058,6 +1058,8 @@ const FV = (() => {
       }
     }
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
+    renderCity(s, now);                                    // the city: in front of the terrain and the searchlight beams, behind the equalizer
+    renderLightBases(s);                                   // the searchlights' bases, on the ground, in front of the city and behind the equalizer
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
@@ -1070,7 +1072,6 @@ const FV = (() => {
         }
       }
     }
-    renderCity(s, now);                                    // the city: in front of the terrain and the equalizer, behind everything that flies
     for (const x of s.x) if (x.on) drawBurst(x);
 
     const frame = Math.floor(now / 250) & 1;
@@ -1121,7 +1122,6 @@ const FV = (() => {
     dot(sx - DOT, sy + 2 * DOT, C.F2);
     if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
     if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
-    renderLightBases(s);                                   // the searchlights' bases, on the ground
     renderKong(s, now, true);                              // both arms: in front of the terrain, the equalizer and the fighter
   }
 
