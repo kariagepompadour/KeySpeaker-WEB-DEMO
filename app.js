@@ -561,35 +561,35 @@ const FV = (() => {
     }
   }
 
-  /* ---- CITY (trial): now and then three buildings of different heights flow by with the terrain (they do not react to the sound), and
-     small people wait on their roofs and in their windows, waving for help. The fighter flies to the nearest one waiting ahead, and
-     when it overlaps a person that person is saved: a small light, and gone. No score. Not in the meteor zone. ---- */
-  const CITY_W = 9, CITY_GAP = 2, CITY_FLOORS = [2, 3, 4];   // a building is 9 dots wide; floors 2, 3 or 4 (a floor is 3 dots of window and 1 of wall)
+  /* ---- CITY (trial): now and then three buildings of different heights, built together, flow by with the terrain (they do not react to
+     the sound), and small people wait on their roofs, waving for help. They are the runner of SOUND TERRARIUM (a 10 x 11 px white figure
+     with a black outline, drawn pixel by pixel). The fighter flies to the nearest one waiting ahead, and when it overlaps a person that
+     person is saved: a small light, and gone. No score. Not in the meteor zone. ---- */
+  const CITY_W = 10, CITY_FLOORS = [4, 6, 8];   // a building is 10 dots wide and 4, 6 or 8 floors high (a floor is a window row and a wall row, 2 dots)
   const CITY_MS_MIN = 30000, CITY_MS_MAX = 60000, CITY_FIRST_MS = 8000;
   const cityNow = () => typeof location !== "undefined" && /city=now/.test(location.search);   // ?city=now: one at once, music or not
-  const SHIRTS = [rgb(255, 255, 255), rgb(255, 96, 96), rgb(96, 205, 255), rgb(255, 232, 96)];
-  const SKIN = rgb(255, 206, 150), LEGS = rgb(40, 40, 70);
-  // The roof person, 3 x 4 dots: A arm, H head, B body, L legs; two frames, arms up and arms out
-  const PERSON = [["AHA", ".B.", ".B.", "L.L"], [".H.", "ABA", ".B.", "L.L"]];
-  const WIN_PERSON = [[".HA", ".B.", ".B."], [".H.", ".BA", ".B."]];   // in a window, 3 x 3 dots
+  // SOUND TERRARIUM's waving runner (its S.wave frames), played in the order 0, 1, 2, 1
+  const WAVER = [
+    ["....ww.w..", "...wwwww..", "...wwww...", "....ww....", "...wwww...", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."],
+    ["....ww..w.", "...wwww.w.", "...wwww.w.", "....ww.w..", "...wwww...", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."],
+    ["....ww....", "...wwww...", "...wwww...", "....ww....", "...wwwwwww", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."]];
+  const WAVE_SEQ = [0, 1, 2, 1], PERSON_W = 10, PERSON_H = 11;
   function newCity(s) {
-    const floors = [0, 1, 2].map(i => CITY_FLOORS[i]);
+    const floors = [...CITY_FLOORS];
     for (let i = 2; i > 0; i--) { const j = nextRandom(s) % (i + 1); [floors[i], floors[j]] = [floors[j], floors[i]]; }
     const g = { x: W + 4, b: [], p: [] };
     floors.forEach((f, i) => {
-      const hDots = 4 * f + 1, b = { ox: i * (CITY_W + CITY_GAP) * DOT, f, h: hDots * DOT, lit: [] };
-      for (let r = 0; r < f * 2; r++) b.lit.push(nextRandom(s) % 100 < 35);   // which windows are lit (two columns a floor)
+      const b = { ox: i * CITY_W * DOT, f, h: (1 + 2 * f) * DOT, lit: [] };   // the buildings stand side by side, joined
+      for (let r = 0; r < f * 3; r++) b.lit.push(nextRandom(s) % 100 < 35);   // which windows are lit (three columns a floor)
       g.b.push(b);
-      if (nextRandom(s) % 100 < 70) g.p.push({ roof: true, bi: i, ox: (1 + nextRandom(s) % (CITY_W - 4)) * DOT, shirt: nextRandom(s) % SHIRTS.length, ph: nextRandom(s) % 7, saved: false });
-      for (let fl = 0; fl < f; fl++) for (let c = 0; c < 2; c++) if (nextRandom(s) % 100 < 22) g.p.push({ roof: false, bi: i, fl, c, shirt: nextRandom(s) % SHIRTS.length, ph: nextRandom(s) % 7, saved: false });
+      if (nextRandom(s) % 100 < 70) g.p.push({ bi: i, ox: 2 + nextRandom(s) % (CITY_W * DOT - PERSON_W - 3), ph: nextRandom(s) % 7, saved: false });
     });
     return g;
   }
   // where a person stands, on the screen (px): x, y of the top left, and its size
   function personRect(g, p) {
-    const b = g.b[p.bi], bx = Math.round(g.x) + b.ox, by = H - b.h;
-    if (p.roof) return { x: bx + p.ox, y: by - 4 * DOT, w: 3 * DOT, h: 4 * DOT };
-    return { x: bx + (1 + p.c * 4) * DOT, y: by + DOT * (1 + p.fl * 4), w: 3 * DOT, h: 3 * DOT };
+    const b = g.b[p.bi];
+    return { x: Math.round(g.x) + b.ox + p.ox, y: H - b.h - PERSON_H, w: PERSON_W, h: PERSON_H };
   }
   function nearestWaiting(s, sx) {
     const g = s.city; if (!g) return null;
@@ -613,7 +613,7 @@ const FV = (() => {
           p.saved = true; s.sparks.push({ x: r.x + r.w / 2, y: r.y + r.h / 2, t: 0 });   // saved: a small light
         }
       }
-      if (g.x < -(3 * (CITY_W + CITY_GAP)) * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
+      if (g.x < -3 * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
     } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
     for (const k of s.sparks) k.t += dt;
     s.sparks = s.sparks.filter(k => k.t < 0.5);
@@ -626,23 +626,18 @@ const FV = (() => {
         for (let r = 0; r < b.h / DOT; r++) for (let c = 0; c < CITY_W; c++) {
           let col = body;
           if (r === 0) col = roof; else if (c === 0) col = edge;
-          else if (r > 0) {   // windows: two columns of 3 x 3 dots, a floor every 4 dots, from the roof down
-            const fl = Math.floor((r - 1) / 4), wr = (r - 1) % 4, wc = c === 1 || c === 2 || c === 3 ? 0 : c === 5 || c === 6 || c === 7 ? 1 : -1;
-            if (wr < 3 && wc >= 0 && fl < b.f) col = b.lit[fl * 2 + wc] ? on : off;
-          }
+          else if ((r - 1) % 2 === 0 && c % 3 !== 0) col = b.lit[Math.floor((r - 1) / 2) * 3 + Math.floor((c - 1) / 3)] ? on : off;   // windows: 2 x 1 dots, like one block of the terrain
           dot(bx + c * DOT, by + r * DOT, col);
         }
       });
-      const fr = Math.floor(now / 300) & 1;
       for (const p of g.p) {
         if (p.saved) continue;
-        const rc = personRect(g, p), f = (fr + p.ph) & 1, shirt = SHIRTS[p.shirt];
-        const art = p.roof ? PERSON[f] : WIN_PERSON[f];
-        if (!p.roof) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) dot(rc.x + x * DOT, rc.y + y * DOT, on);   // the window lights up behind them
-        art.forEach((row, y) => [...row].forEach((ch, x) => {
-          if (ch === ".") return;
-          dot(rc.x + x * DOT, rc.y + y * DOT, ch === "H" ? SKIN : ch === "L" ? LEGS : shirt);
-        }));
+        const rc = personRect(g, p), rows = WAVER[WAVE_SEQ[(Math.floor(now / 230) + p.ph) % 4]];
+        for (let yy = 0; yy < PERSON_H; yy++) for (let xx = 0; xx < PERSON_W; xx++) {   // a black outline round the white figure, as in SOUND TERRARIUM
+          if (rows[yy][xx] === ".") continue;
+          for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (rows[yy][xx] && (!rows[yy + oy] || rows[yy + oy][xx + ox] !== "w")) px(rc.x + xx + ox, rc.y + yy + oy, 0xff000000);
+        }
+        for (let yy = 0; yy < PERSON_H; yy++) for (let xx = 0; xx < PERSON_W; xx++) if (rows[yy][xx] === "w") px(rc.x + xx, rc.y + yy, rgb(255, 255, 255));
       }
     }
     for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
