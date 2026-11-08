@@ -656,7 +656,7 @@ const FV = (() => {
         const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 110 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
         if (ok.length && s.cit.length < 4) {
           const b = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 3, x0 = Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2;
-          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, x0 });   // stop: how near the fighter it runs before it stops
+          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });   // stop: how near the fighter it runs before it stops; back: after the ground has carried it off to the left it runs back to the middle of the screen and waves again
         }
         s.citAcc = 5 + (nextRandom(s) % 50) / 10;
       }
@@ -668,7 +668,13 @@ const FV = (() => {
       else if (c.mode === "run") {
         c.x -= (SCROLL_PX_S + 42) * dt;
         if (c.x + PERSON_W / 2 - fc <= c.stop) { c.mode = "wave"; c.t = 0; }
-      } else c.x -= SCROLL_PX_S * dt;   // standing and waving, carried along by the ground
+      } else if (c.mode === "back") {   // running back to the right, against the ground
+        c.x += (72 - SCROLL_PX_S) * dt;
+        if (c.x + PERSON_W / 2 >= c.backTo) { c.mode = "wave"; c.t = 0; c.back = false; }
+      } else {   // standing and waving, carried along by the ground
+        c.x -= SCROLL_PX_S * dt;
+        if (c.back && c.x + PERSON_W / 2 < 60) c.mode = "back";   // carried past the fighter: some turn round
+      }
     }
     s.cit = s.cit.filter(c => c.x > -PERSON_W - 2);
     for (const k of s.sparks) k.t += dt;
@@ -713,8 +719,8 @@ const FV = (() => {
     }
     for (const c of s.cit) {   // the people who came out of the buildings
       if (c.mode === "wait") continue;
-      const gy = H - GROUND - PERSON_H, run = c.mode === "run";
-      drawFigure(run ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, run);   // running left: mirrored
+      const gy = H - GROUND - PERSON_H, run = c.mode === "run" || c.mode === "back";
+      drawFigure(run ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, c.mode === "run");   // running left: mirrored; running back to the right: as it is
     }
     for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
       const u = k.t / 0.5, r = 1 + Math.round(u * 2), a = 1 - u, c = rgb(Math.round(255 * a + 40), Math.round(255 * a + 40), Math.round(180 * a + 20));
