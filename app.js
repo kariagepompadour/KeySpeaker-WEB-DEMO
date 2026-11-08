@@ -152,7 +152,8 @@ const FV = (() => {
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
         k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
         k.kind = forcedKind(s);
-        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
+        if (typeof location !== "undefined" && /pink=1/.test(location.search) && k.kind === 0) k.pal = 6;   // ?pink=1: the ape always comes in shocking pink, to look at it
+        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = (typeof location !== "undefined" && /pink=1/.test(location.search)) ? 6 : pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
       return evadeTgt;
     }
     if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
