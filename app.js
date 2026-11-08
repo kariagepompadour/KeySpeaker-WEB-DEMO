@@ -561,11 +561,101 @@ const FV = (() => {
     }
   }
 
+  /* ---- CITY (trial): now and then three buildings of different heights flow by with the terrain (they do not react to the sound), and
+     small people wait on their roofs and in their windows, waving for help. The fighter flies to the nearest one waiting ahead, and
+     when it overlaps a person that person is saved: a small light, and gone. No score. Not in the meteor zone. ---- */
+  const CITY_W = 9, CITY_GAP = 2, CITY_FLOORS = [2, 3, 4];   // a building is 9 dots wide; floors 2, 3 or 4 (a floor is 3 dots of window and 1 of wall)
+  const CITY_MS_MIN = 30000, CITY_MS_MAX = 60000, CITY_FIRST_MS = 8000;
+  const cityNow = () => typeof location !== "undefined" && /city=now/.test(location.search);   // ?city=now: one at once, music or not
+  const SHIRTS = [rgb(255, 255, 255), rgb(255, 96, 96), rgb(96, 205, 255), rgb(255, 232, 96)];
+  const SKIN = rgb(255, 206, 150), LEGS = rgb(40, 40, 70);
+  // The roof person, 3 x 4 dots: A arm, H head, B body, L legs; two frames, arms up and arms out
+  const PERSON = [["AHA", ".B.", ".B.", "L.L"], [".H.", "ABA", ".B.", "L.L"]];
+  const WIN_PERSON = [[".HA", ".B.", ".B."], [".H.", ".BA", ".B."]];   // in a window, 3 x 3 dots
+  function newCity(s) {
+    const floors = [0, 1, 2].map(i => CITY_FLOORS[i]);
+    for (let i = 2; i > 0; i--) { const j = nextRandom(s) % (i + 1); [floors[i], floors[j]] = [floors[j], floors[i]]; }
+    const g = { x: W + 4, b: [], p: [] };
+    floors.forEach((f, i) => {
+      const hDots = 4 * f + 1, b = { ox: i * (CITY_W + CITY_GAP) * DOT, f, h: hDots * DOT, lit: [] };
+      for (let r = 0; r < f * 2; r++) b.lit.push(nextRandom(s) % 100 < 35);   // which windows are lit (two columns a floor)
+      g.b.push(b);
+      if (nextRandom(s) % 100 < 70) g.p.push({ roof: true, bi: i, ox: (1 + nextRandom(s) % (CITY_W - 4)) * DOT, shirt: nextRandom(s) % SHIRTS.length, ph: nextRandom(s) % 7, saved: false });
+      for (let fl = 0; fl < f; fl++) for (let c = 0; c < 2; c++) if (nextRandom(s) % 100 < 22) g.p.push({ roof: false, bi: i, fl, c, shirt: nextRandom(s) % SHIRTS.length, ph: nextRandom(s) % 7, saved: false });
+    });
+    return g;
+  }
+  // where a person stands, on the screen (px): x, y of the top left, and its size
+  function personRect(g, p) {
+    const b = g.b[p.bi], bx = Math.round(g.x) + b.ox, by = H - b.h;
+    if (p.roof) return { x: bx + p.ox, y: by - 4 * DOT, w: 3 * DOT, h: 4 * DOT };
+    return { x: bx + (1 + p.c * 4) * DOT, y: by + DOT * (1 + p.fl * 4), w: 3 * DOT, h: 3 * DOT };
+  }
+  function nearestWaiting(s, sx) {
+    const g = s.city; if (!g) return null;
+    let best = null;
+    for (const p of g.p) {
+      if (p.saved) continue;
+      const r = personRect(g, p);
+      if (r.x > sx + SHIP_W + 6 && r.x < W - 30 && (!best || r.x < best.x)) best = r;
+    }
+    return best;
+  }
+  function updateCity(s, now, dt, sx, sy) {
+    if (s.nextCityMs === 0) s.nextCityMs = now + (cityNow() ? 300 : CITY_FIRST_MS);
+    const g = s.city;
+    if (g) {
+      g.x -= SCROLL_PX_S * dt;
+      for (const p of g.p) {
+        if (p.saved) continue;
+        const r = personRect(g, p);
+        if (Math.abs(r.x + r.w / 2 - (sx + SHIP_W / 2)) < (SHIP_W + r.w) / 2 && Math.abs(r.y + r.h / 2 - (sy + SHIP_H / 2)) < (SHIP_H + r.h) / 2) {
+          p.saved = true; s.sparks.push({ x: r.x + r.w / 2, y: r.y + r.h / 2, t: 0 });   // saved: a small light
+        }
+      }
+      if (g.x < -(3 * (CITY_W + CITY_GAP)) * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
+    } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
+    for (const k of s.sparks) k.t += dt;
+    s.sparks = s.sparks.filter(k => k.t < 0.5);
+  }
+  function renderCity(s, now) {
+    const g = s.city, body = rgb(52, 62, 94), edge = rgb(116, 134, 186), roof = rgb(158, 172, 210), off = rgb(16, 20, 34), on = rgb(255, 214, 110);
+    if (g) {
+      g.b.forEach(b => {
+        const bx = Math.round(g.x) + b.ox, by = H - b.h;
+        for (let r = 0; r < b.h / DOT; r++) for (let c = 0; c < CITY_W; c++) {
+          let col = body;
+          if (r === 0) col = roof; else if (c === 0) col = edge;
+          else if (r > 0) {   // windows: two columns of 3 x 3 dots, a floor every 4 dots, from the roof down
+            const fl = Math.floor((r - 1) / 4), wr = (r - 1) % 4, wc = c === 1 || c === 2 || c === 3 ? 0 : c === 5 || c === 6 || c === 7 ? 1 : -1;
+            if (wr < 3 && wc >= 0 && fl < b.f) col = b.lit[fl * 2 + wc] ? on : off;
+          }
+          dot(bx + c * DOT, by + r * DOT, col);
+        }
+      });
+      const fr = Math.floor(now / 300) & 1;
+      for (const p of g.p) {
+        if (p.saved) continue;
+        const rc = personRect(g, p), f = (fr + p.ph) & 1, shirt = SHIRTS[p.shirt];
+        const art = p.roof ? PERSON[f] : WIN_PERSON[f];
+        if (!p.roof) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) dot(rc.x + x * DOT, rc.y + y * DOT, on);   // the window lights up behind them
+        art.forEach((row, y) => [...row].forEach((ch, x) => {
+          if (ch === ".") return;
+          dot(rc.x + x * DOT, rc.y + y * DOT, ch === "H" ? SKIN : ch === "L" ? LEGS : shirt);
+        }));
+      }
+    }
+    for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
+      const u = k.t / 0.5, r = 1 + Math.round(u * 2), a = 1 - u, c = rgb(Math.round(255 * a + 40), Math.round(255 * a + 40), Math.round(180 * a + 20));
+      for (const [dx, dy] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) dot(Math.round(k.x - 1) + dx * DOT, Math.round(k.y - 1) + dy * DOT, c);
+    }
+  }
+
   const newEnemy = () => ({ x: 0, y: 0, baseY: 0, phase: 0, mineMs: 0, kind: WALKER, on: false, fireMs: 0, born: MAT_S });
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0,
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [],
     mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
@@ -622,7 +712,7 @@ const FV = (() => {
     s.nextFireMs = nowMs + FIRE_MS_MIN; s.avgSet = false; s.nextBombMs = nowMs + BOMB_MS_MIN / 2;
     for (const a of [s.m, s.b, s.x, s.e, s.mine, s.eb]) for (const o of a) o.on = false;
     s.shieldUntil = nowMs; s.dodging = false; s.beat = false; s.lunge = 0;
-    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0;
+    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0; s.city = null; s.nextCityMs = 0; s.sparks = [];
     s.eq = false; s.pattern = s.next = 0; s.scale = 0; s.fade = 0;
     s.modeSinceMs = s.silentSinceMs = nowMs; s.wasSilent = false; s.eqFresh = false; s.eqAvgSet = false;
     s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0);
@@ -787,6 +877,8 @@ const FV = (() => {
       target = s.dodgeTo; ease = DODGE_EASE_S; threat = true; break;
     }
     if (!threat) s.dodging = false;
+    const wait = !s.mz.ph && !threat ? nearestWaiting(s, sx) : null;   // somebody waits ahead: the fighter flies to them
+    if (wait) { target = wait.y + wait.h / 2 - SHIP_H / 2; ease = CHASE_EASE_S; }
     if (target < TOP + 4) target = TOP + 4;
     if (s.mz.u > 0) { target += (mzPath(s, now) - target) * s.mz.u; ease = 0.05 + (ease - 0.05) * (1 - s.mz.u); }
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
@@ -794,6 +886,7 @@ const FV = (() => {
     const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
+    updateCity(s, now, dt, sx, sy);
 
     for (const m of s.m) {
       if (!m.on) continue;
@@ -982,6 +1075,7 @@ const FV = (() => {
         }
       }
     }
+    renderCity(s, now);                                    // the city: in front of the terrain and the equalizer, behind everything that flies
     for (const x of s.x) if (x.on) drawBurst(x);
 
     const frame = Math.floor(now / 250) & 1;
