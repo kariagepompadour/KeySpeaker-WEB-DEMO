@@ -566,8 +566,8 @@ const FV = (() => {
      the sound), and small people wait on their roofs, waving for help. They are the runner of SOUND TERRARIUM (a 10 x 11 px white figure
      with a black outline, drawn pixel by pixel). The fighter flies to the nearest one waiting ahead, and when it overlaps a person that
      person is saved: a small light, and gone. No score. Not in the meteor zone. ---- */
-  const CITY_W = 10, CITY_FLOOR_MIN = 3, CITY_FLOOR_MAX = 8, CITY_N_MIN = 2, CITY_N_MAX = 9;   // a building is 10 dots wide and 3 to 8 floors high (a floor is a window row and a wall row, 2 dots); 2 to 9 of them stand side by side
-  const CITY_MS_MIN = 30000, CITY_MS_MAX = 60000, CITY_FIRST_MS = 8000;
+  const CITY_W = 10, CITY_FLOOR_MIN = 3, CITY_FLOOR_MAX = 8, CITY_N_MIN = 3, CITY_N_MAX = 5;   // a building is 10 dots wide and 3 to 8 floors high (a floor is a window row and a wall row, 2 dots); 3 to 5 of them stand side by side
+  const CITY_MS_MIN = 12000, CITY_MS_MAX = 25000, CITY_FIRST_MS = 8000;
   const cityNow = () => typeof location !== "undefined" && /city=now/.test(location.search);   // ?city=now: one at once, music or not
   // SOUND TERRARIUM's waving runner (its S.wave frames), played in the order 0, 1, 2, 1
   const WAVER = [
@@ -682,6 +682,7 @@ const FV = (() => {
         const bx = Math.round(g.x) + b.ox, by = H - GROUND - b.h, R = b.h / DOT;
         if (bx > W || bx < -CITY_W * DOT) return;
         for (let r = 0; r < R; r++) for (let c = 0; c < CITY_W; c++) {
+          if (b.f >= 2 && r >= R - 2 && c >= 4 && c <= 5) { dot(bx + c * DOT, by + r * DOT, BLACK); continue; }   // the doorway: black, so the people come out of it
           if (r < b.top[c] || b.gone[r * CITY_W + c]) continue;                // broken off, or bitten away
           const open = r === b.top[c] || b.gone[(r - 1) * CITY_W + c];         // nothing above: a lit edge
           let col = body;
