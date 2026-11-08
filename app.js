@@ -442,8 +442,8 @@ const FV = (() => {
   }
   // The searchlight's base: a 3 x 3 dot square of light grey with a blue window in the middle, standing on the ground where the beam starts
   // (in front of the terrain and the equalizer, so it is always seen).
-  function renderLightBases(s) {   // a T of four cells, like a Tetris piece: three light grey cells and, on top, the lamp
-    const grey = rgb(206, 208, 214), lamp = rgb(70, 140, 255);
+  function renderLightBases(s) {   // a T of four cells, like a Tetris piece: three light grey cells and, on top, the yellow lamp
+    const grey = rgb(206, 208, 214), lamp = rgb(255, 226, 90);
     for (const l of s.lights) {
       const gx = Math.round(l.x) - 4, gy = H - GROUND - 2 * DOT;   // the bottom row of the terrain stays colourful: the base stands on the second row
       for (let i = 0; i < 3; i++) dot(gx + i * DOT, gy + DOT, grey);
@@ -591,9 +591,6 @@ const FV = (() => {
     }
     for (let yy = 0; yy < hh; yy++) for (let xx = 0; xx < PERSON_W; xx++) { const ch = at(yy, xx); if (ch !== ".") px(x + xx, y + yy, FIG[ch]); }
   }
-  // a runner who waves as he runs: the waving upper body of the waver on running legs
-  const LEGS = [["...wwww...", "..ww..ww..", ".ww....ww."], ["...wwww...", "...w..w...", "...w..w..."]];
-  const waveRun = (wf, lf) => [...WAVER[wf].slice(0, 8), ...LEGS[lf]];
   function newCity(s) {
     const n = CITY_N_MIN + nextRandom(s) % (CITY_N_MAX - CITY_N_MIN + 1);   // how many buildings in a row, by lot
     const g = { x: W + 4, n, b: [], p: [] }, rnd = (m) => nextRandom(s) % m;
@@ -651,15 +648,15 @@ const FV = (() => {
       }
       if (g.x < -g.n * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
     } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
-    // now and then a few people come out of an arch all at once, running after the fighter and waving to it; they keep up with it for a
-    // while, then stop and wave as the ground carries them off
+    // now and then a few people come out of an arch all at once and run after the fighter (SOUND TERRARIUM's runner, as it is); after a
+    // while each stops and waves to the fighter as the ground carries it off
     if (g) {
       s.citAcc -= dt;
       if (s.citAcc <= 0) {
-        const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 70 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
+        const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 110 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
         if (ok.length && s.cit.length < 4) {
           const b = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 3, x0 = Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2;
-          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, off: -8 + nextRandom(s) % 34, keep: 2.2 + (nextRandom(s) % 30) / 10, x0 });
+          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, x0 });   // stop: how near the fighter it runs before it stops
         }
         s.citAcc = 5 + (nextRandom(s) % 50) / 10;
       }
@@ -670,11 +667,8 @@ const FV = (() => {
       if (c.mode === "wait") { c.x -= SCROLL_PX_S * dt; if (c.t >= 0) c.mode = "run"; }
       else if (c.mode === "run") {
         c.x -= (SCROLL_PX_S + 42) * dt;
-        if (c.x + PERSON_W / 2 <= fc + c.off) { c.mode = "follow"; c.t = 0; }
-      } else if (c.mode === "follow") {   // keeping up with the fighter: running on the spot under it
-        c.x += (fc + c.off - PERSON_W / 2 - c.x) * (1 - Math.exp(-dt / 0.15));
-        if (c.t > c.keep) { c.mode = "wave"; c.t = 0; }
-      } else c.x -= SCROLL_PX_S * dt;   // standing, carried along by the ground
+        if (c.x + PERSON_W / 2 - fc <= c.stop) { c.mode = "wave"; c.t = 0; }
+      } else c.x -= SCROLL_PX_S * dt;   // standing and waving, carried along by the ground
     }
     s.cit = s.cit.filter(c => c.x > -PERSON_W - 2);
     for (const k of s.sparks) k.t += dt;
@@ -718,8 +712,8 @@ const FV = (() => {
     }
     for (const c of s.cit) {   // the people who came out of the buildings
       if (c.mode === "wait") continue;
-      const gy = H - GROUND - PERSON_H, run = c.mode === "run" || c.mode === "follow", wf = WAVE_SEQ[(Math.floor(now / 150) + c.ph) % 4];
-      drawFigure(run ? waveRun(wf, Math.floor(now / 110) & 1) : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, run);
+      const gy = H - GROUND - PERSON_H, run = c.mode === "run";
+      drawFigure(run ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, run);   // running left: mirrored
     }
     for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
       const u = k.t / 0.5, r = 1 + Math.round(u * 2), a = 1 - u, c = rgb(Math.round(255 * a + 40), Math.round(255 * a + 40), Math.round(180 * a + 20));
