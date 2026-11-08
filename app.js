@@ -8,11 +8,13 @@ const COL_BG = BLACK, COL_FG = rgb(255, 255, 255), COL_DIM = rgb(132, 130, 132),
       COL_WARN = rgb(255, 255, 0), COL_BAD = rgb(255, 0, 0), COL_AMBER = rgb(255, 165, 0);
 const BUILD_TAG = "WEB-2";
 
-function px(x, y, c) { if (x >= 0 && x < W && y >= 0 && y < H) fb[y * W + x] = c; }
+let CLIP = null;   // when set ({x0, y0, x1, y1}), nothing is drawn outside it (used to redraw a few things over the fighter only)
+function px(x, y, c) { if (x >= 0 && x < W && y >= 0 && y < H && (!CLIP || (x >= CLIP.x0 && x < CLIP.x1 && y >= CLIP.y0 && y < CLIP.y1))) fb[y * W + x] = c; }
 function fillRect(x, y, w, h, c) {
   x |= 0; y |= 0;
-  for (let j = Math.max(0, y); j < Math.min(H, y + h); j++)
-    for (let i = Math.max(0, x); i < Math.min(W, x + w); i++) fb[j * W + i] = c;
+  const x0 = CLIP ? Math.max(0, CLIP.x0) : 0, x1 = CLIP ? Math.min(W, CLIP.x1) : W, y0 = CLIP ? Math.max(0, CLIP.y0) : 0, y1 = CLIP ? Math.min(H, CLIP.y1) : H;
+  for (let j = Math.max(y0, y); j < Math.min(y1, y + h); j++)
+    for (let i = Math.max(x0, x); i < Math.min(x1, x + w); i++) fb[j * W + i] = c;
 }
 function dot(x, y, c) { fillRect(x, y, 3, 3, c); }
 
@@ -1141,7 +1143,11 @@ const FV = (() => {
       }
     }
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
-    // the fighter: in front of the terrain and the beams, behind the monsters' arms (so a hand can close in front of it), the city and the equalizer
+    renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
+    renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
+    renderLightBases(s);                                   // the searchlights' bases, on the ground, in front of the city and behind the equalizer
+    // the fighter: in front of the city, behind the equalizer; the monsters' arms are drawn once more over it, but only where it is, so a hand or a tentacle
+    // closes in front of the fighter while the buildings stay in front of the arms
     const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
     for (let y = 0; y < SHIP_DH; y++)
       for (let x = 0; x < SHIP_DW; x++) {
@@ -1157,9 +1163,7 @@ const FV = (() => {
     dot(sx - DOT, sy + 2 * DOT, C.F2);
     if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
     if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
-    renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
-    renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
-    renderLightBases(s);                                   // the searchlights' bases, on the ground, in front of the city and behind the equalizer
+    CLIP = { x0: sx - 3 * DOT, y0: sy - 2 * DOT, x1: sx + SHIP_W + 2 * DOT, y1: sy + SHIP_H + 2 * DOT }; renderKong(s, now, true); CLIP = null;
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
