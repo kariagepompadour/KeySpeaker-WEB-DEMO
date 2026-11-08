@@ -122,8 +122,9 @@ const FV = (() => {
     { lit: rgb(176, 76, 224), dark: rgb(34, 16, 44), eye: rgb(120, 255, 160) },  // 3 purple
     { lit: rgb(240, 192, 56), dark: rgb(54, 38, 10), eye: rgb(255, 255, 255) },  // 4 gold, rare
     { lit: rgb(222, 232, 255), dark: rgb(38, 42, 62), eye: rgb(255, 60, 90) },   // 5 ghost white
+    { lit: rgb(255, 40, 170), dark: rgb(255, 40, 170), eye: rgb(255, 255, 255) },  // 6 shocking pink, flat all over (no lit edge, no shade), now and then
   ];
-  const PAL_PERCENT = [30, 16, 16, 16, 10, 12];   // how often each comes (sums to 100)
+  const PAL_PERCENT = [27, 14, 14, 14, 9, 12, 10];   // how often each comes (sums to 100); the flat pink one visit in ten
   const KCS = PALS.map(p => ({ ...KC, B: p.lit, K: p.dark, R: p.dark, T: p.dark, D: p.dark, E: p.eye, arm: p.dark, armEdge: p.lit, armShade: p.dark, hand: p.dark }));
   const pickPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < PAL_PERCENT.length - 1 && r >= PAL_PERCENT[i]) r -= PAL_PERCENT[i++]; return i; };
 
@@ -333,8 +334,8 @@ const FV = (() => {
   const SQ_OVER_FLIP = {   // fighter above it, on its right
     6: { d1: [20, -2], d2: [6, 4], o: [6, -3] }, 5: { d1: [16, 2], d2: [6, 5], o: [5, 3] },
     0: { d1: [-20, -2], d2: [-6, 4], o: [-7, 2] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-6, 8] } };
-  const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
-  const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
+  const SQUID_PAL_PERCENT = [9, 9, 23, 9, 32, 9, 9];   // yellow and green most often, the flat pink one visit in eleven (sums to 100)
+  const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < SQUID_PAL_PERCENT.length - 1 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
   const SQ_RISE_PX = 6;   // two dots
   const squidTop = (k, now) => H - KH - 2 - Math.round(SQ_RISE_PX * (k.rise || 0));   // it floats: it rises while the fighter is ahead of it (to its left), and sinks back once the fighter has passed
   const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(k, now) + SQ_NECK[1] * DOT];
