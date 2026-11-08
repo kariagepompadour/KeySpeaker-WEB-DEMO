@@ -1141,7 +1141,8 @@ const FV = (() => {
       }
     }
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
-    renderCity(s, now);                                    // the city: in front of the terrain and the searchlight beams, behind the equalizer
+    renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
+    renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
     renderLightBases(s);                                   // the searchlights' bases, on the ground, in front of the city and behind the equalizer
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
@@ -1205,7 +1206,6 @@ const FV = (() => {
     dot(sx - DOT, sy + 2 * DOT, C.F2);
     if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
     if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
-    renderKong(s, now, true);                              // both arms: in front of the terrain, the equalizer and the fighter
   }
 
   return { newState, init, push, analyze, update, render, COL_MS, DB_SILENT, MODE_MS, EQ_BANDS };
