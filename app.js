@@ -1141,6 +1141,22 @@ const FV = (() => {
       }
     }
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
+    // the fighter: in front of the terrain and the beams, behind the monsters' arms (so a hand can close in front of it), the city and the equalizer
+    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
+    for (let y = 0; y < SHIP_DH; y++)
+      for (let x = 0; x < SHIP_DW; x++) {
+        const c = SHIP[y][x]; if (c === '.') continue;
+        dot(sx + x * DOT, sy + y * DOT, c === 'W' ? C.Wh : c === 'B' ? C.B : c === 'M' ? C.M : C.Cy);
+      }
+    if (s.shieldUntil - now > 0 && (Math.floor(now / 50) & 1)) {
+      const fx = sx + SHIP_W + DOT;
+      for (let y = -1; y <= SHIP_DH; y++) dot(fx + (y < 0 || y === SHIP_DH ? -DOT : 0), sy + y * DOT, C.SH);
+      dot(sx + Math.trunc(SHIP_W / 2), sy - 2 * DOT, C.SH);
+      dot(sx + Math.trunc(SHIP_W / 2), sy + SHIP_H + DOT, C.SH);
+    }
+    dot(sx - DOT, sy + 2 * DOT, C.F2);
+    if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
+    if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
     renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
     renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
     renderLightBases(s);                                   // the searchlights' bases, on the ground, in front of the city and behind the equalizer
@@ -1191,21 +1207,6 @@ const FV = (() => {
     }
     for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
 
-    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
-    for (let y = 0; y < SHIP_DH; y++)
-      for (let x = 0; x < SHIP_DW; x++) {
-        const c = SHIP[y][x]; if (c === '.') continue;
-        dot(sx + x * DOT, sy + y * DOT, c === 'W' ? C.Wh : c === 'B' ? C.B : c === 'M' ? C.M : C.Cy);
-      }
-    if (s.shieldUntil - now > 0 && (Math.floor(now / 50) & 1)) {
-      const fx = sx + SHIP_W + DOT;
-      for (let y = -1; y <= SHIP_DH; y++) dot(fx + (y < 0 || y === SHIP_DH ? -DOT : 0), sy + y * DOT, C.SH);
-      dot(sx + Math.trunc(SHIP_W / 2), sy - 2 * DOT, C.SH);
-      dot(sx + Math.trunc(SHIP_W / 2), sy + SHIP_H + DOT, C.SH);
-    }
-    dot(sx - DOT, sy + 2 * DOT, C.F2);
-    if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
-    if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
   }
 
   return { newState, init, push, analyze, update, render, COL_MS, DB_SILENT, MODE_MS, EQ_BANDS };
