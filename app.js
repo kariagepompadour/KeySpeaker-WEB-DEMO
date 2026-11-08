@@ -565,7 +565,7 @@ const FV = (() => {
      the sound), and small people wait on their roofs, waving for help. They are the runner of SOUND TERRARIUM (a 10 x 11 px white figure
      with a black outline, drawn pixel by pixel). The fighter flies to the nearest one waiting ahead, and when it overlaps a person that
      person is saved: a small light, and gone. No score. Not in the meteor zone. ---- */
-  const CITY_W = 10, CITY_FLOORS = [4, 6, 8];   // a building is 10 dots wide and 4, 6 or 8 floors high (a floor is a window row and a wall row, 2 dots)
+  const CITY_W = 10, CITY_FLOOR_MIN = 3, CITY_FLOOR_MAX = 8, CITY_N_MIN = 2, CITY_N_MAX = 9;   // a building is 10 dots wide and 3 to 8 floors high (a floor is a window row and a wall row, 2 dots); 2 to 9 of them stand side by side
   const CITY_MS_MIN = 30000, CITY_MS_MAX = 60000, CITY_FIRST_MS = 8000;
   const cityNow = () => typeof location !== "undefined" && /city=now/.test(location.search);   // ?city=now: one at once, music or not
   // SOUND TERRARIUM's waving runner (its S.wave frames), played in the order 0, 1, 2, 1
@@ -575,15 +575,15 @@ const FV = (() => {
     ["....ww....", "...wwww...", "...wwww...", "....ww....", "...wwwwwww", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."]];
   const WAVE_SEQ = [0, 1, 2, 1], PERSON_W = 10, PERSON_H = 11;
   function newCity(s) {
-    const floors = [...CITY_FLOORS];
-    for (let i = 2; i > 0; i--) { const j = nextRandom(s) % (i + 1); [floors[i], floors[j]] = [floors[j], floors[i]]; }
-    const g = { x: W + 4, b: [], p: [] };
-    floors.forEach((f, i) => {
+    const n = CITY_N_MIN + nextRandom(s) % (CITY_N_MAX - CITY_N_MIN + 1);   // how many buildings in a row, by lot
+    const g = { x: W + 4, n, b: [], p: [] };
+    for (let i = 0; i < n; i++) {
+      const f = CITY_FLOOR_MIN + nextRandom(s) % (CITY_FLOOR_MAX - CITY_FLOOR_MIN + 1);
       const b = { ox: i * CITY_W * DOT, f, h: (1 + 2 * f) * DOT, lit: [] };   // the buildings stand side by side, joined
       for (let r = 0; r < f * 3; r++) b.lit.push(nextRandom(s) % 100 < 35);   // which windows are lit (three columns a floor)
       g.b.push(b);
-      if (nextRandom(s) % 100 < 70) g.p.push({ bi: i, ox: 2 + nextRandom(s) % (CITY_W * DOT - PERSON_W - 3), ph: nextRandom(s) % 7, saved: false });
-    });
+      if (nextRandom(s) % 100 < 45) g.p.push({ bi: i, ox: 2 + nextRandom(s) % (CITY_W * DOT - PERSON_W - 3), ph: nextRandom(s) % 7, saved: false });
+    }
     return g;
   }
   // where a person stands, on the screen (px): x, y of the top left, and its size
@@ -613,7 +613,7 @@ const FV = (() => {
           p.saved = true; s.sparks.push({ x: r.x + r.w / 2, y: r.y + r.h / 2, t: 0 });   // saved: a small light
         }
       }
-      if (g.x < -3 * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
+      if (g.x < -g.n * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
     } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
     for (const k of s.sparks) k.t += dt;
     s.sparks = s.sparks.filter(k => k.t < 0.5);
