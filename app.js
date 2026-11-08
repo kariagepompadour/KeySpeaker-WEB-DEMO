@@ -442,13 +442,12 @@ const FV = (() => {
   }
   // The searchlight's base: a 3 x 3 dot square of light grey with a blue window in the middle, standing on the ground where the beam starts
   // (in front of the terrain and the equalizer, so it is always seen).
-  function renderLightBases(s) {   // a simple T: a wide low block with a small block on top (the lamp, with a blue dot), 7 x 2 dots with 3 x 2 on top
-    const grey = rgb(206, 208, 214), shade = rgb(160, 162, 172), lamp = rgb(70, 140, 255);
+  function renderLightBases(s) {   // a T of four cells, like a Tetris piece: three light grey cells and, on top, the lamp
+    const grey = rgb(206, 208, 214), lamp = rgb(70, 140, 255);
     for (const l of s.lights) {
-      const gx = Math.round(l.x) - 10, gy = H - GROUND - 4 * DOT;   // the bottom row of the terrain stays colourful: the base stands on the second row
-      for (let i = 0; i < 7; i++) { dot(gx + i * DOT, gy + 2 * DOT, grey); dot(gx + i * DOT, gy + 3 * DOT, shade); }
-      dot(gx + 2 * DOT, gy, grey); dot(gx + 3 * DOT, gy, lamp); dot(gx + 4 * DOT, gy, grey);
-      dot(gx + 2 * DOT, gy + DOT, grey); dot(gx + 3 * DOT, gy + DOT, grey); dot(gx + 4 * DOT, gy + DOT, grey);
+      const gx = Math.round(l.x) - 4, gy = H - GROUND - 2 * DOT;   // the bottom row of the terrain stays colourful: the base stands on the second row
+      for (let i = 0; i < 3; i++) dot(gx + i * DOT, gy + DOT, grey);
+      dot(gx + DOT, gy, lamp);
     }
   }
   // Is there a part of the monster at the screen point x, y? The ape's silhouette or the squid's head (the tentacles let light through).
@@ -465,7 +464,7 @@ const FV = (() => {
       const a = l.a, sn = Math.sin(a), cs = Math.cos(a), side = l.x < midX ? -1 : 1;   // which side of the monster the light stands on
       
       for (let t = 0; t < LIGHT_LEN; t += DOT) {
-        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - GROUND - 10 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
+        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - GROUND - 4 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
         if (monsterAt(kk, now, cx, y) && (cx - midX) * side <= 0) break;   // the light runs on over the monster up to its centre line, and stops there
         if (cx >= fx && cx < fx + SHIP_W && y >= fy && y < fy + SHIP_H) break;   // it stops on the fighter too
         for (let j = -hw; j <= hw; j++) {
@@ -582,41 +581,42 @@ const FV = (() => {
     ["......b...", ".....www..", ".....www..", ".....ww...", "...wwwwbb.", "..wwowwww.", ".....ww...", "....wwww..", "...ww..ww.", "..ww...ww.", "..ww......"]];
   const WAVE_SEQ = [0, 1, 2, 1], PERSON_W = 10, PERSON_H = 11;
   const FIG = { w: rgb(255, 255, 255), o: rgb(255, 140, 32), b: rgb(40, 168, 255) };
-  function drawFigure(rows, x, y, mirror) {   // the figure with a black outline, as in SOUND TERRARIUM
-    const at = (yy, xx) => (yy < 0 || yy >= PERSON_H || xx < 0 || xx >= PERSON_W) ? "." : rows[yy][mirror ? PERSON_W - 1 - xx : xx];
-    for (let yy = -1; yy <= PERSON_H; yy++) for (let xx = -1; xx <= PERSON_W; xx++) {
+  function drawFigure(rows, x, y, mirror) {   // the figure with a black outline, as in SOUND TERRARIUM (any number of rows)
+    const hh = rows.length, at = (yy, xx) => (yy < 0 || yy >= hh || xx < 0 || xx >= PERSON_W) ? "." : rows[yy][mirror ? PERSON_W - 1 - xx : xx];
+    for (let yy = -1; yy <= hh; yy++) for (let xx = -1; xx <= PERSON_W; xx++) {
       if (at(yy, xx) !== ".") continue;
       let near = false;
       for (let oy = -1; oy <= 1 && !near; oy++) for (let ox = -1; ox <= 1; ox++) if (at(yy + oy, xx + ox) !== ".") { near = true; break; }
       if (near) px(x + xx, y + yy, 0xff000000);
     }
-    for (let yy = 0; yy < PERSON_H; yy++) for (let xx = 0; xx < PERSON_W; xx++) { const ch = at(yy, xx); if (ch !== ".") px(x + xx, y + yy, FIG[ch]); }
+    for (let yy = 0; yy < hh; yy++) for (let xx = 0; xx < PERSON_W; xx++) { const ch = at(yy, xx); if (ch !== ".") px(x + xx, y + yy, FIG[ch]); }
   }
+  // a runner who waves as he runs: the waving upper body of the waver on running legs
+  const LEGS = [["...wwww...", "..ww..ww..", ".ww....ww."], ["...wwww...", "...w..w...", "...w..w..."]];
+  const waveRun = (wf, lf) => [...WAVER[wf].slice(0, 8), ...LEGS[lf]];
   function newCity(s) {
     const n = CITY_N_MIN + nextRandom(s) % (CITY_N_MAX - CITY_N_MIN + 1);   // how many buildings in a row, by lot
     const g = { x: W + 4, n, b: [], p: [] }, rnd = (m) => nextRandom(s) % m;
     for (let i = 0; i < n; i++) {
-      const collapsed = rnd(100) < 12, f = collapsed ? 1 + rnd(2) : CITY_FLOOR_MIN + rnd(CITY_FLOOR_MAX - CITY_FLOOR_MIN + 1), R = 1 + 2 * f;
-      const b = { ox: i * CITY_W * DOT, f, h: R * DOT, lit: [], top: Array(CITY_W).fill(0), gone: new Uint8Array(R * CITY_W), fire: null, collapsed };   // the buildings stand side by side, joined
+      const collapsed = rnd(100) < 5, f = collapsed ? 1 + rnd(2) : CITY_FLOOR_MIN + rnd(CITY_FLOOR_MAX - CITY_FLOOR_MIN + 1), R = 1 + 2 * f;
+      const b = { ox: i * CITY_W * DOT, f, h: R * DOT, lit: [], top: Array(CITY_W).fill(0), gone: new Uint8Array(R * CITY_W), fire: null, win: null, collapsed };   // the buildings stand side by side, joined
       for (let r = 0; r < f * 3; r++) { const q = rnd(100); b.lit.push(q < 20 ? 1 : q < 26 ? 2 : 0); }   // a window: dark, lit, or burning
-      // as a Space Invaders defence shield: chamfered top corners, an arch cut into the bottom (the door), and bites eaten out of it
+      // a little like a Space Invaders defence shield, but only at the corners: chamfered top corners, a small arch at the bottom (the door),
+      // and a rough bite out of a corner now and then
       const keep = (r, c) => r < 2 && c >= 3 && c <= 6;   // the middle of the roof stays whole: a person stands there
       if (collapsed) for (let c = 0; c < CITY_W; c++) b.top[c] = rnd(2 * f);   // a collapsed building: a heap of rubble
-      else { b.top[0] = b.top[9] = 2; b.top[1] = b.top[8] = 1; }
-      if (f >= 2) for (let r = R - 2; r < R; r++) for (let c = 3; c <= 6; c++) b.gone[r * CITY_W + c] = 1;   // the arch
-      for (let k = 0, nb = 1 + rnd(3); k < nb; k++) {                       // bites: rough, speckled clusters
-        const bc = rnd(CITY_W), br = 1 + rnd(Math.max(1, R - 2)), rr = 1.1 + rnd(100) / 100 * 1.5;
-        for (let dr = -3; dr <= 3; dr++) for (let dc = -3; dc <= 3; dc++) {
-          const r = br + dr, c = bc + dc; if (r < 0 || r >= R || c < 0 || c >= CITY_W || keep(r, c)) continue;
-          const d = Math.hypot(dr, dc); if (d <= rr + 0.7 && rnd(100) < 100 * (1 - d / (rr + 1.3)) + 25) b.gone[r * CITY_W + c] = 1;
+      else { b.top[0] = b.top[9] = 1 + rnd(2); b.top[1] = b.top[8] = rnd(2); }
+      if (f >= 2) for (let r = R - 2; r < R; r++) for (let c = 4; c <= 5; c++) b.gone[r * CITY_W + c] = 1;   // the arch, two dots wide
+      for (const [cr, cc] of [[2, 0], [2, CITY_W - 1], [R - 3, 0], [R - 3, CITY_W - 1]]) {   // the four corners, each bitten about one time in three
+        if (collapsed || rnd(100) >= 34) continue;
+        const rr = 0.9 + rnd(100) / 100 * 0.8;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+          const r = cr + dr, c = cc + dc; if (r < 2 || r >= R || c < 0 || c >= CITY_W || keep(r, c)) continue;
+          const d = Math.hypot(dr, dc); if (d <= rr + 0.5 && rnd(100) < 100 * (1 - d / (rr + 1.2)) + 25) b.gone[r * CITY_W + c] = 1;
         }
       }
-      for (let r = 1; r < R; r++) for (let c = 0; c < CITY_W; c++) {        // erosion: crumbs next to what is already missing
-        if (b.gone[r * CITY_W + c] || keep(r, c)) continue;
-        const near = (r > 0 && b.gone[(r - 1) * CITY_W + c]) + (r < R - 1 && b.gone[(r + 1) * CITY_W + c]) + (c > 0 && b.gone[r * CITY_W + c - 1]) + (c < CITY_W - 1 && b.gone[r * CITY_W + c + 1]);
-        if (near && rnd(100) < 14 + 8 * near) b.gone[r * CITY_W + c] = 1;
-      }
-      if (!collapsed && rnd(100) < 30) b.fire = [0, 1, 8, 9][rnd(4)];       // a fire on a broken corner
+      if (!collapsed && rnd(100) < 18) b.fire = [0, 9][rnd(2)];
+      if (!collapsed && f >= 3 && rnd(100) < 40) { b.win = { fl: rnd(f - 1), c: 1 }; b.lit[b.win.fl * 3 + 1] = 1; b.win.ph = rnd(7); }   // somebody leans out of a lit window, waving       // a fire on a broken corner
       g.b.push(b);
       if (!collapsed && rnd(100) < 45) g.p.push({ bi: i, ox: 2 + rnd(CITY_W * DOT - PERSON_W - 3), ph: rnd(7), saved: false });
     }
@@ -651,21 +651,30 @@ const FV = (() => {
       }
       if (g.x < -g.n * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
     } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
-    // now and then somebody comes out of an arch: half of them run after the fighter, half stand and wave at it
+    // now and then a few people come out of an arch all at once, running after the fighter and waving to it; they keep up with it for a
+    // while, then stop and wave as the ground carries them off
     if (g) {
-      s.citAcc += dt;
-      if (s.citAcc > 0.9) {
-        s.citAcc = 0;
-        const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 40 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
-        if (s.cit.length < 5 && ok.length && nextRandom(s) % 100 < 40) {
-          const b = ok[nextRandom(s) % ok.length];
-          s.cit.push({ x: Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2, mode: nextRandom(s) % 2 ? "run" : "wave", ph: nextRandom(s) % 7 });
+      s.citAcc -= dt;
+      if (s.citAcc <= 0) {
+        const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 70 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
+        if (ok.length && s.cit.length < 4) {
+          const b = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 3, x0 = Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2;
+          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, off: -8 + nextRandom(s) % 34, keep: 2.2 + (nextRandom(s) % 30) / 10, x0 });
         }
+        s.citAcc = 5 + (nextRandom(s) % 50) / 10;
       }
     }
     for (const c of s.cit) {
-      c.x -= SCROLL_PX_S * dt;                                              // on the ground, carried along with it
-      if (c.mode === "run") { c.x -= 34 * dt; if (c.x + PERSON_W / 2 < sx + SHIP_W / 2 + 4) c.mode = "wave"; }   // after the fighter, until under it
+      c.t += dt;
+      const fc = sx + SHIP_W / 2;
+      if (c.mode === "wait") { c.x -= SCROLL_PX_S * dt; if (c.t >= 0) c.mode = "run"; }
+      else if (c.mode === "run") {
+        c.x -= (SCROLL_PX_S + 42) * dt;
+        if (c.x + PERSON_W / 2 <= fc + c.off) { c.mode = "follow"; c.t = 0; }
+      } else if (c.mode === "follow") {   // keeping up with the fighter: running on the spot under it
+        c.x += (fc + c.off - PERSON_W / 2 - c.x) * (1 - Math.exp(-dt / 0.15));
+        if (c.t > c.keep) { c.mode = "wave"; c.t = 0; }
+      } else c.x -= SCROLL_PX_S * dt;   // standing, carried along by the ground
     }
     s.cit = s.cit.filter(c => c.x > -PERSON_W - 2);
     for (const k of s.sparks) k.t += dt;
@@ -696,6 +705,10 @@ const FV = (() => {
             dot(sx, sy, rgb(v, v, v + 12));
           }
         }
+        if (b.win) {   // head and a waving hand out of the window: the upper body of the waver, its bottom row on the sill
+          const wx = bx + (1 + b.win.c * 3) * DOT + DOT - 5, wy = by + (1 + 2 * b.win.fl) * DOT + DOT - 6;
+          drawFigure(WAVER[WAVE_SEQ[(Math.floor(now / 200) + b.win.ph) % 4]].slice(0, 6), wx, wy, false);
+        }
       });
       for (const p of g.p) {
         if (p.saved) continue;
@@ -703,9 +716,10 @@ const FV = (() => {
         drawFigure(WAVER[WAVE_SEQ[(Math.floor(now / 230) + p.ph) % 4]], rc.x, rc.y, false);
       }
     }
-    for (const c of s.cit) {   // the people who came out of the buildings: they run after the fighter, or stand and wave at it
-      const gy = H - GROUND - PERSON_H;
-      drawFigure(c.mode === "run" ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, c.mode === "run");
+    for (const c of s.cit) {   // the people who came out of the buildings
+      if (c.mode === "wait") continue;
+      const gy = H - GROUND - PERSON_H, run = c.mode === "run" || c.mode === "follow", wf = WAVE_SEQ[(Math.floor(now / 150) + c.ph) % 4];
+      drawFigure(run ? waveRun(wf, Math.floor(now / 110) & 1) : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, run);
     }
     for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
       const u = k.t / 0.5, r = 1 + Math.round(u * 2), a = 1 - u, c = rgb(Math.round(255 * a + 40), Math.round(255 * a + 40), Math.round(180 * a + 20));
