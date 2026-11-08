@@ -445,7 +445,7 @@ const FV = (() => {
   function renderLightBases(s) {
     const grey = rgb(206, 208, 214), shade = rgb(168, 170, 178), win = rgb(70, 140, 255);
     for (const l of s.lights) {
-      const gx = Math.round(l.x) - 4, gy = H - 3 * DOT;
+      const gx = Math.round(l.x) - 4, gy = H - GROUND - 3 * DOT;   // the bottom row of the terrain stays colourful: the base stands on the second row
       for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) dot(gx + i * DOT, gy + j * DOT, i === 1 && j === 1 ? win : j === 2 || i === 2 ? shade : grey);
     }
   }
@@ -463,7 +463,7 @@ const FV = (() => {
       const a = l.a, sn = Math.sin(a), cs = Math.cos(a), side = l.x < midX ? -1 : 1;   // which side of the monster the light stands on
       
       for (let t = 0; t < LIGHT_LEN; t += DOT) {
-        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
+        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - GROUND - 5 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
         if (monsterAt(kk, now, cx, y) && (cx - midX) * side <= 0) break;   // the light runs on over the monster up to its centre line, and stops there
         if (cx >= fx && cx < fx + SHIP_W && y >= fy && y < fy + SHIP_H) break;   // it stops on the fighter too
         for (let j = -hw; j <= hw; j++) {
@@ -589,7 +589,7 @@ const FV = (() => {
   // where a person stands, on the screen (px): x, y of the top left, and its size
   function personRect(g, p) {
     const b = g.b[p.bi];
-    return { x: Math.round(g.x) + b.ox + p.ox, y: H - b.h - PERSON_H, w: PERSON_W, h: PERSON_H };
+    return { x: Math.round(g.x) + b.ox + p.ox, y: H - GROUND - b.h - PERSON_H, w: PERSON_W, h: PERSON_H };
   }
   function nearestWaiting(s, sx) {
     const g = s.city; if (!g) return null;
@@ -622,7 +622,7 @@ const FV = (() => {
     const g = s.city, body = rgb(52, 62, 94), edge = rgb(116, 134, 186), roof = rgb(158, 172, 210), off = rgb(16, 20, 34), on = rgb(255, 214, 110);
     if (g) {
       g.b.forEach(b => {
-        const bx = Math.round(g.x) + b.ox, by = H - b.h;
+        const bx = Math.round(g.x) + b.ox, by = H - GROUND - b.h;   // from the second row of the terrain up: the bottom row stays colourful
         for (let r = 0; r < b.h / DOT; r++) for (let c = 0; c < CITY_W; c++) {
           let col = body;
           if (r === 0) col = roof; else if (c === 0) col = edge;
