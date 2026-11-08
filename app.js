@@ -8,11 +8,13 @@ const COL_BG = BLACK, COL_FG = rgb(255, 255, 255), COL_DIM = rgb(132, 130, 132),
       COL_WARN = rgb(255, 255, 0), COL_BAD = rgb(255, 0, 0), COL_AMBER = rgb(255, 165, 0);
 const BUILD_TAG = "WEB-2";
 
-function px(x, y, c) { if (x >= 0 && x < W && y >= 0 && y < H) fb[y * W + x] = c; }
+let CLIP = null;   // when set ({x0, y0, x1, y1}), nothing is drawn outside it (used to redraw a few things over the fighter only)
+function px(x, y, c) { if (x >= 0 && x < W && y >= 0 && y < H && (!CLIP || (x >= CLIP.x0 && x < CLIP.x1 && y >= CLIP.y0 && y < CLIP.y1))) fb[y * W + x] = c; }
 function fillRect(x, y, w, h, c) {
   x |= 0; y |= 0;
-  for (let j = Math.max(0, y); j < Math.min(H, y + h); j++)
-    for (let i = Math.max(0, x); i < Math.min(W, x + w); i++) fb[j * W + i] = c;
+  const x0 = CLIP ? Math.max(0, CLIP.x0) : 0, x1 = CLIP ? Math.min(W, CLIP.x1) : W, y0 = CLIP ? Math.max(0, CLIP.y0) : 0, y1 = CLIP ? Math.min(H, CLIP.y1) : H;
+  for (let j = Math.max(y0, y); j < Math.min(y1, y + h); j++)
+    for (let i = Math.max(x0, x); i < Math.min(x1, x + w); i++) fb[j * W + i] = c;
 }
 function dot(x, y, c) { fillRect(x, y, 3, 3, c); }
 
@@ -122,8 +124,9 @@ const FV = (() => {
     { lit: rgb(176, 76, 224), dark: rgb(34, 16, 44), eye: rgb(120, 255, 160) },  // 3 purple
     { lit: rgb(240, 192, 56), dark: rgb(54, 38, 10), eye: rgb(255, 255, 255) },  // 4 gold, rare
     { lit: rgb(222, 232, 255), dark: rgb(38, 42, 62), eye: rgb(255, 60, 90) },   // 5 ghost white
+    { lit: rgb(255, 142, 222), dark: rgb(255, 40, 170), eye: rgb(255, 226, 64) },  // 6 shocking pink all over, a lighter pink where the light falls, yellow eyes, now and then
   ];
-  const PAL_PERCENT = [30, 16, 16, 16, 10, 12];   // how often each comes (sums to 100)
+  const PAL_PERCENT = [28, 15, 15, 15, 10, 12, 5];   // how often each comes (sums to 100); the shocking-pink one is special: one visit in twenty
   const KCS = PALS.map(p => ({ ...KC, B: p.lit, K: p.dark, R: p.dark, T: p.dark, D: p.dark, E: p.eye, arm: p.dark, armEdge: p.lit, armShade: p.dark, hand: p.dark }));
   const pickPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < PAL_PERCENT.length - 1 && r >= PAL_PERCENT[i]) r -= PAL_PERCENT[i++]; return i; };
 
@@ -149,7 +152,8 @@ const FV = (() => {
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
         k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
         k.kind = forcedKind(s);
-        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
+        if (typeof location !== "undefined" && /pink=1/.test(location.search) && k.kind === 0) k.pal = 6;   // ?pink=1: the ape always comes in shocking pink, to look at it
+        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = (typeof location !== "undefined" && /pink=1/.test(location.search)) ? 6 : pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
       return evadeTgt;
     }
     if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
@@ -333,8 +337,8 @@ const FV = (() => {
   const SQ_OVER_FLIP = {   // fighter above it, on its right
     6: { d1: [20, -2], d2: [6, 4], o: [6, -3] }, 5: { d1: [16, 2], d2: [6, 5], o: [5, 3] },
     0: { d1: [-20, -2], d2: [-6, 4], o: [-7, 2] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-6, 8] } };
-  const SQUID_PAL_PERCENT = [10, 10, 25, 10, 35, 10];   // yellow and green most often (sums to 100)
-  const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < 5 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
+  const SQUID_PAL_PERCENT = [9, 10, 24, 9, 34, 9, 5];   // yellow and green most often, the shocking-pink one visit in twenty (sums to 100)
+  const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < SQUID_PAL_PERCENT.length - 1 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
   const SQ_RISE_PX = 6;   // two dots
   const squidTop = (k, now) => H - KH - 2 - Math.round(SQ_RISE_PX * (k.rise || 0));   // it floats: it rises while the fighter is ahead of it (to its left), and sinks back once the fighter has passed
   const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(k, now) + SQ_NECK[1] * DOT];
@@ -442,11 +446,12 @@ const FV = (() => {
   }
   // The searchlight's base: a 3 x 3 dot square of light grey with a blue window in the middle, standing on the ground where the beam starts
   // (in front of the terrain and the equalizer, so it is always seen).
-  function renderLightBases(s) {
-    const grey = rgb(206, 208, 214), shade = rgb(168, 170, 178), win = rgb(70, 140, 255);
+  function renderLightBases(s) {   // a T of four cells, like a Tetris piece: three light grey cells and, on top, the yellow lamp
+    const grey = rgb(206, 208, 214), lamp = rgb(255, 226, 90);
     for (const l of s.lights) {
-      const gx = Math.round(l.x) - 4, gy = H - 3 * DOT;
-      for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) dot(gx + i * DOT, gy + j * DOT, i === 1 && j === 1 ? win : j === 2 || i === 2 ? shade : grey);
+      const gx = Math.round(l.x) - 4, gy = H - GROUND - 2 * DOT;   // the bottom row of the terrain stays colourful: the base stands on the second row
+      for (let i = 0; i < 3; i++) dot(gx + i * DOT, gy + DOT, grey);
+      dot(gx + DOT, gy, lamp);
     }
   }
   // Is there a part of the monster at the screen point x, y? The ape's silhouette or the squid's head (the tentacles let light through).
@@ -463,7 +468,7 @@ const FV = (() => {
       const a = l.a, sn = Math.sin(a), cs = Math.cos(a), side = l.x < midX ? -1 : 1;   // which side of the monster the light stands on
       
       for (let t = 0; t < LIGHT_LEN; t += DOT) {
-        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - 1 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
+        const fade = 1 - t / LIGHT_LEN, cx = l.x + sn * t, y = H - GROUND - 4 - cs * t, hw = 1 + ((t / 42) | 0);   // the beam widens: dots either side of its middle
         if (monsterAt(kk, now, cx, y) && (cx - midX) * side <= 0) break;   // the light runs on over the monster up to its centre line, and stops there
         if (cx >= fx && cx < fx + SHIP_W && y >= fy && y < fy + SHIP_H) break;   // it stops on the fighter too
         for (let j = -hw; j <= hw; j++) {
@@ -561,11 +566,177 @@ const FV = (() => {
     }
   }
 
+  /* ---- CITY (trial): now and then three buildings of different heights, built together, flow by with the terrain (they do not react to
+     the sound), and small people wait on their roofs, waving for help. They are the runner of SOUND TERRARIUM (a 10 x 11 px white figure
+     with a black outline, drawn pixel by pixel). The fighter flies to the nearest one waiting ahead, and when it overlaps a person that
+     person is saved: a small light, and gone. No score. Not in the meteor zone. ---- */
+  const CITY_W = 10, CITY_FLOOR_MIN = 3, CITY_FLOOR_MAX = 8, CITY_N_MIN = 3, CITY_N_MAX = 5;   // a building is 10 dots wide and 3 to 8 floors high (a floor is a window row and a wall row, 2 dots); 3 to 5 of them stand side by side
+  const CITY_MS_MIN = 12000, CITY_MS_MAX = 25000, CITY_FIRST_MS = 8000;
+  const cityNow = () => typeof location !== "undefined" && /city=now/.test(location.search);   // ?city=now: one at once, music or not
+  // SOUND TERRARIUM's waving runner (its S.wave frames), played in the order 0, 1, 2, 1
+  const WAVER = [
+    ["....ww.w..", "...wwwww..", "...wwww...", "....ww....", "...wwww...", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."],
+    ["....ww..w.", "...wwww.w.", "...wwww.w.", "....ww.w..", "...wwww...", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."],
+    ["....ww....", "...wwww...", "...wwww...", "....ww....", "...wwwwwww", "..wwww....", "....ww....", "....ww....", "...wwww...", "...w..w...", "..ww..ww.."]];
+  // and its running frames (it runs to the right; mirrored when it runs left): w white, o orange, b blue
+  const RUNNER = [
+    ["......b...", ".....www..", ".....www..", "....www...", "..wwowww..", ".wwbww..ww", "....ww....", "....www...", ".wwwwbww..", "......ww..", "......ww.."],
+    ["......b...", ".....www..", ".....www..", ".....ww...", "....www...", "...wwwww..", "...wwwwbww", ".....www..", "....wwww..", "...www....", "....ww...."],
+    ["......b...", ".....www..", ".....www..", ".....ww...", "...wwwwbb.", "..wwowwww.", ".....ww...", "....wwww..", "...ww..ww.", "..ww...ww.", "..ww......"]];
+  const WAVE_SEQ = [0, 1, 2, 1], PERSON_W = 10, PERSON_H = 11;
+  const FIG = { w: rgb(255, 255, 255), o: rgb(255, 140, 32), b: rgb(40, 168, 255) };
+  function drawFigure(rows, x, y, mirror) {   // the figure with a black outline, as in SOUND TERRARIUM (any number of rows)
+    const hh = rows.length, at = (yy, xx) => (yy < 0 || yy >= hh || xx < 0 || xx >= PERSON_W) ? "." : rows[yy][mirror ? PERSON_W - 1 - xx : xx];
+    for (let yy = -1; yy <= hh; yy++) for (let xx = -1; xx <= PERSON_W; xx++) {
+      if (at(yy, xx) !== ".") continue;
+      let near = false;
+      for (let oy = -1; oy <= 1 && !near; oy++) for (let ox = -1; ox <= 1; ox++) if (at(yy + oy, xx + ox) !== ".") { near = true; break; }
+      if (near) px(x + xx, y + yy, 0xff000000);
+    }
+    for (let yy = 0; yy < hh; yy++) for (let xx = 0; xx < PERSON_W; xx++) { const ch = at(yy, xx); if (ch !== ".") px(x + xx, y + yy, FIG[ch]); }
+  }
+  function newCity(s) {
+    const n = CITY_N_MIN + nextRandom(s) % (CITY_N_MAX - CITY_N_MIN + 1);   // how many buildings in a row, by lot
+    const g = { x: W + 4, n, b: [], p: [] }, rnd = (m) => nextRandom(s) % m;
+    for (let i = 0; i < n; i++) {
+      const collapsed = rnd(100) < 5, f = collapsed ? 1 + rnd(2) : CITY_FLOOR_MIN + rnd(CITY_FLOOR_MAX - CITY_FLOOR_MIN + 1), R = 1 + 2 * f;
+      const b = { ox: i * CITY_W * DOT, f, h: R * DOT, lit: [], top: Array(CITY_W).fill(0), gone: new Uint8Array(R * CITY_W), fire: null, win: null, collapsed };   // the buildings stand side by side, joined
+      for (let r = 0; r < f * 3; r++) { const q = rnd(100); b.lit.push(q < 20 ? 1 : q < 26 ? 2 : 0); }   // a window: dark, lit, or burning
+      // a little like a Space Invaders defence shield, but only at the corners: chamfered top corners, a small arch at the bottom (the door),
+      // and a rough bite out of a corner now and then
+      const keep = (r, c) => r < 2 && c >= 3 && c <= 6;   // the middle of the roof stays whole: a person stands there
+      if (collapsed) for (let c = 0; c < CITY_W; c++) b.top[c] = rnd(2 * f);   // a collapsed building: a heap of rubble
+      else { b.top[0] = b.top[9] = 1 + rnd(2); b.top[1] = b.top[8] = rnd(2); }
+      if (f >= 2) for (let r = R - 2; r < R; r++) for (let c = 4; c <= 5; c++) b.gone[r * CITY_W + c] = 1;   // the arch, two dots wide
+      for (const [cr, cc] of [[2, 0], [2, CITY_W - 1], [R - 3, 0], [R - 3, CITY_W - 1]]) {   // the four corners, each bitten about one time in three
+        if (collapsed || rnd(100) >= 34) continue;
+        const rr = 0.9 + rnd(100) / 100 * 0.8;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+          const r = cr + dr, c = cc + dc; if (r < 2 || r >= R || c < 0 || c >= CITY_W || keep(r, c)) continue;
+          const d = Math.hypot(dr, dc); if (d <= rr + 0.5 && rnd(100) < 100 * (1 - d / (rr + 1.2)) + 25) b.gone[r * CITY_W + c] = 1;
+        }
+      }
+      if (!collapsed && rnd(100) < 18) b.fire = [0, 9][rnd(2)];
+      if (!collapsed && f >= 3 && rnd(100) < 40) { b.win = { fl: rnd(f - 1), c: 1 }; b.lit[b.win.fl * 3 + 1] = 1; b.win.ph = rnd(7); }   // somebody leans out of a lit window, waving       // a fire on a broken corner
+      g.b.push(b);
+      if (!collapsed && rnd(100) < 45) g.p.push({ bi: i, ox: 2 + rnd(CITY_W * DOT - PERSON_W - 3), ph: rnd(7), saved: false });
+    }
+    return g;
+  }
+  // where a person stands, on the screen (px): x, y of the top left, and its size
+  function personRect(g, p) {
+    const b = g.b[p.bi];
+    return { x: Math.round(g.x) + b.ox + p.ox, y: H - GROUND - b.h - PERSON_H, w: PERSON_W, h: PERSON_H };
+  }
+  function nearestWaiting(s, sx) {
+    const g = s.city; if (!g) return null;
+    let best = null;
+    for (const p of g.p) {
+      if (p.saved) continue;
+      const r = personRect(g, p);
+      if (r.x > sx + SHIP_W + 6 && r.x < W - 30 && (!best || r.x < best.x)) best = r;
+    }
+    return best;
+  }
+  function updateCity(s, now, dt, sx, sy) {
+    if (s.nextCityMs === 0) s.nextCityMs = now + (cityNow() ? 300 : CITY_FIRST_MS);
+    const g = s.city;
+    if (g) {
+      g.x -= SCROLL_PX_S * dt;
+      for (const p of g.p) {
+        if (p.saved) continue;
+        const r = personRect(g, p);
+        if (Math.abs(r.x + r.w / 2 - (sx + SHIP_W / 2)) < (SHIP_W + r.w) / 2 && Math.abs(r.y + r.h / 2 - (sy + SHIP_H / 2)) < (SHIP_H + r.h) / 2) {
+          p.saved = true; s.sparks.push({ x: r.x + r.w / 2, y: r.y + r.h / 2, t: 0 });   // saved: a small light
+        }
+      }
+      if (g.x < -g.n * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
+    } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
+    // now and then a few people come out of an arch all at once and run after the fighter (SOUND TERRARIUM's runner, as it is); after a
+    // while each stops and waves to the fighter as the ground carries it off
+    if (g) {
+      s.citAcc -= dt;
+      if (s.citAcc <= 0) {
+        const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 110 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
+        if (ok.length && s.cit.length < 4) {
+          const b = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 3, x0 = Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2;
+          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });   // stop: how near the fighter it runs before it stops; back: after the ground has carried it off to the left it runs back to the middle of the screen and waves again
+        }
+        s.citAcc = 5 + (nextRandom(s) % 50) / 10;
+      }
+    }
+    for (const c of s.cit) {
+      c.t += dt;
+      const fc = sx + SHIP_W / 2;
+      if (c.mode === "wait") { c.x -= SCROLL_PX_S * dt; if (c.t >= 0) c.mode = "run"; }
+      else if (c.mode === "run") {
+        c.x -= (SCROLL_PX_S + 42) * dt;
+        if (c.x + PERSON_W / 2 - fc <= c.stop) { c.mode = "wave"; c.t = 0; }
+      } else if (c.mode === "back") {   // running back to the right, against the ground
+        c.x += (72 - SCROLL_PX_S) * dt;
+        if (c.x + PERSON_W / 2 >= c.backTo) { c.mode = "wave"; c.t = 0; c.back = false; }
+      } else {   // standing and waving, carried along by the ground
+        c.x -= SCROLL_PX_S * dt;
+        if (c.back && c.x + PERSON_W / 2 < 60) c.mode = "back";   // carried past the fighter: some turn round
+      }
+    }
+    s.cit = s.cit.filter(c => c.x > -PERSON_W - 2);
+    for (const k of s.sparks) k.t += dt;
+    s.sparks = s.sparks.filter(k => k.t < 0.5);
+  }
+  function renderCity(s, now) {
+    const g = s.city, body = rgb(52, 62, 94), edge = rgb(116, 134, 186), roof = rgb(158, 172, 210), off = rgb(16, 20, 34), on = rgb(255, 214, 110), fire1 = rgb(255, 150, 40), fire2 = rgb(255, 70, 20);
+    if (g) {
+      const blink = Math.floor(now / 140);
+      g.b.forEach((b, bi) => {
+        const bx = Math.round(g.x) + b.ox, by = H - GROUND - b.h, R = b.h / DOT;
+        if (bx > W || bx < -CITY_W * DOT) return;
+        for (let r = 0; r < R; r++) for (let c = 0; c < CITY_W; c++) {
+          if (b.f >= 2 && r >= R - 2 && c >= 4 && c <= 5) { dot(bx + c * DOT, by + r * DOT, BLACK); continue; }   // the doorway: black, so the people come out of it
+          if (r < b.top[c] || b.gone[r * CITY_W + c]) continue;                // broken off, or bitten away
+          const open = r === b.top[c] || b.gone[(r - 1) * CITY_W + c];         // nothing above: a lit edge
+          let col = body;
+          if (open) col = roof; else if (c === 0) col = edge;
+          else if ((r - 1) % 2 === 0 && c % 3 !== 0) { const w = b.lit[Math.floor((r - 1) / 2) * 3 + Math.floor((c - 1) / 3)]; col = w === 1 ? on : w === 2 ? ((blink + bi) & 1 ? fire1 : fire2) : off; }   // windows: 2 x 1 dots, like one block of the terrain
+          dot(bx + c * DOT, by + r * DOT, col);
+        }
+        if (b.fire !== null) {   // a fire on the broken corner, flickering, and its smoke rising and thinning
+          const fx = bx + b.fire * DOT, fy = by + b.top[b.fire] * DOT, f1 = (blink + bi) & 1;
+          dot(fx, fy - DOT, f1 ? fire1 : fire2);                       // the flame
+          dot(fx, fy - 2 * DOT, f1 ? fire2 : fire1);
+          if (((blink + bi) & 3) !== 0) dot(fx + (f1 ? DOT : -DOT), fy - DOT, fire2);   // it licks to the side
+          for (let k = 0; k < 4; k++) {                                // smoke: dots drifting up, growing paler
+            const u = ((now / 1100) + k / 4 + bi * 0.37) % 1, sx = fx + Math.round(Math.sin(u * 5 + k * 1.7) * 4) - 1, sy = fy - 3 * DOT - Math.round(u * 26), v = Math.round(150 * (1 - u)) + 30;
+            dot(sx, sy, rgb(v, v, v + 12));
+          }
+        }
+        if (b.win) {   // head and a waving hand out of the window: the upper body of the waver, its bottom row on the sill
+          const wx = bx + (1 + b.win.c * 3) * DOT + DOT - 5, wy = by + (1 + 2 * b.win.fl) * DOT + DOT - 6;
+          drawFigure(WAVER[WAVE_SEQ[(Math.floor(now / 200) + b.win.ph) % 4]].slice(0, 6), wx, wy, false);
+        }
+      });
+      for (const p of g.p) {
+        if (p.saved) continue;
+        const rc = personRect(g, p);
+        drawFigure(WAVER[WAVE_SEQ[(Math.floor(now / 230) + p.ph) % 4]], rc.x, rc.y, false);
+      }
+    }
+    for (const c of s.cit) {   // the people who came out of the buildings
+      if (c.mode === "wait") continue;
+      const gy = H - GROUND - PERSON_H, run = c.mode === "run" || c.mode === "back";
+      drawFigure(run ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, c.mode === "run");   // running left: mirrored; running back to the right: as it is
+    }
+    for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
+      const u = k.t / 0.5, r = 1 + Math.round(u * 2), a = 1 - u, c = rgb(Math.round(255 * a + 40), Math.round(255 * a + 40), Math.round(180 * a + 20));
+      for (const [dx, dy] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) dot(Math.round(k.x - 1) + dx * DOT, Math.round(k.y - 1) + dy * DOT, c);
+    }
+  }
+
   const newEnemy = () => ({ x: 0, y: 0, baseY: 0, phase: 0, mineMs: 0, kind: WALKER, on: false, fireMs: 0, born: MAT_S });
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0,
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0,
     mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
@@ -622,7 +793,7 @@ const FV = (() => {
     s.nextFireMs = nowMs + FIRE_MS_MIN; s.avgSet = false; s.nextBombMs = nowMs + BOMB_MS_MIN / 2;
     for (const a of [s.m, s.b, s.x, s.e, s.mine, s.eb]) for (const o of a) o.on = false;
     s.shieldUntil = nowMs; s.dodging = false; s.beat = false; s.lunge = 0;
-    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0;
+    s.nextSpawnMs = s.nextAimMs = nowMs; s.k = newKong(); s.evadeCur = 0; s.lights = []; s.nextLightMs = 0; s.city = null; s.nextCityMs = 0; s.sparks = []; s.cit = []; s.citAcc = 0;
     s.eq = false; s.pattern = s.next = 0; s.scale = 0; s.fade = 0;
     s.modeSinceMs = s.silentSinceMs = nowMs; s.wasSilent = false; s.eqFresh = false; s.eqAvgSet = false;
     s.eqH.fill(0); s.eqPeak.fill(0); s.eqHold.fill(0);
@@ -787,6 +958,8 @@ const FV = (() => {
       target = s.dodgeTo; ease = DODGE_EASE_S; threat = true; break;
     }
     if (!threat) s.dodging = false;
+    const wait = !s.mz.ph && !threat ? nearestWaiting(s, sx) : null;   // somebody waits ahead: the fighter flies to them
+    if (wait) { target = wait.y + wait.h / 2 - SHIP_H / 2; ease = CHASE_EASE_S; }
     if (target < TOP + 4) target = TOP + 4;
     if (s.mz.u > 0) { target += (mzPath(s, now) - target) * s.mz.u; ease = 0.05 + (ease - 0.05) * (1 - s.mz.u); }
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
@@ -794,6 +967,7 @@ const FV = (() => {
     const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
+    updateCity(s, now, dt, sx, sy);
 
     for (const m of s.m) {
       if (!m.on) continue;
@@ -970,6 +1144,27 @@ const FV = (() => {
       }
     }
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
+    renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
+    renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
+    renderLightBases(s);                                   // the searchlights' bases, on the ground, in front of the city and behind the equalizer
+    // the fighter: in front of the city, behind the equalizer; the monsters' arms are drawn once more over it, but only where it is, so a hand or a tentacle
+    // closes in front of the fighter while the buildings stay in front of the arms
+    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
+    for (let y = 0; y < SHIP_DH; y++)
+      for (let x = 0; x < SHIP_DW; x++) {
+        const c = SHIP[y][x]; if (c === '.') continue;
+        dot(sx + x * DOT, sy + y * DOT, c === 'W' ? C.Wh : c === 'B' ? C.B : c === 'M' ? C.M : C.Cy);
+      }
+    if (s.shieldUntil - now > 0 && (Math.floor(now / 50) & 1)) {
+      const fx = sx + SHIP_W + DOT;
+      for (let y = -1; y <= SHIP_DH; y++) dot(fx + (y < 0 || y === SHIP_DH ? -DOT : 0), sy + y * DOT, C.SH);
+      dot(sx + Math.trunc(SHIP_W / 2), sy - 2 * DOT, C.SH);
+      dot(sx + Math.trunc(SHIP_W / 2), sy + SHIP_H + DOT, C.SH);
+    }
+    dot(sx - DOT, sy + 2 * DOT, C.F2);
+    if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
+    if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
+    CLIP = { x0: sx - 3 * DOT, y0: sy - 2 * DOT, x1: sx + SHIP_W + 2 * DOT, y1: sy + SHIP_H + 2 * DOT }; renderKong(s, now, true); CLIP = null;
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
@@ -1017,23 +1212,6 @@ const FV = (() => {
     }
     for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
 
-    const sx = shipX(now) + Math.round(s.lunge), sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
-    for (let y = 0; y < SHIP_DH; y++)
-      for (let x = 0; x < SHIP_DW; x++) {
-        const c = SHIP[y][x]; if (c === '.') continue;
-        dot(sx + x * DOT, sy + y * DOT, c === 'W' ? C.Wh : c === 'B' ? C.B : c === 'M' ? C.M : C.Cy);
-      }
-    if (s.shieldUntil - now > 0 && (Math.floor(now / 50) & 1)) {
-      const fx = sx + SHIP_W + DOT;
-      for (let y = -1; y <= SHIP_DH; y++) dot(fx + (y < 0 || y === SHIP_DH ? -DOT : 0), sy + y * DOT, C.SH);
-      dot(sx + Math.trunc(SHIP_W / 2), sy - 2 * DOT, C.SH);
-      dot(sx + Math.trunc(SHIP_W / 2), sy + SHIP_H + DOT, C.SH);
-    }
-    dot(sx - DOT, sy + 2 * DOT, C.F2);
-    if ((Math.floor(now / 90)) & 1) dot(sx - 2 * DOT, sy + 2 * DOT, C.F1);
-    if (s.mz.u > 0.5) { dot(sx - 2 * DOT, sy + 2 * DOT, C.F1); if ((Math.floor(now / 60)) & 1) dot(sx - 3 * DOT, sy + 2 * DOT, C.F2); }
-    renderLightBases(s);                                   // the searchlights' bases, on the ground
-    renderKong(s, now, true);                              // both arms: in front of the terrain, the equalizer and the fighter
   }
 
   return { newState, init, push, analyze, update, render, COL_MS, DB_SILENT, MODE_MS, EQ_BANDS };

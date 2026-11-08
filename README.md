@@ -19,6 +19,10 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
   toward the fighter, before it passes and again after it has passed, now and then.
   And now and then searchlights stand on the ground, each with a small base, flow by with the terrain and sweep the sky with a slim beam
   (a city on alert); a beam stops at a monster's centre line and on the fighter.
+  Now and then a row of three to five damaged buildings flows by with the terrain, and the little runner of SOUND TERRARIUM
+  waves for help from the roofs and the windows; the fighter flies to the nearest one and saves them (a small light, no score),
+  and a few people run out of the doorways, run after the fighter and wave to it. Once in twenty visits a monster comes in
+  shocking pink. (Trial switches in the address: ?city=now, ?lights=now, ?pink=1.)
 - **Keyboard (text input) mode**: the spinning Earth with "KEY BOARD", Mac/Win and A/あ, the cheat sheet, and the
   MOUSE screen while G0 is held.
 - **Help screen**, with the device's own key list.
