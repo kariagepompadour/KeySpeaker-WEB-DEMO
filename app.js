@@ -84,8 +84,8 @@ const FV = (() => {
   const K_SPEED = { [K_THREAT]: 0.4, [K_WALK]: 1, [K_REACH]: 0.6, [K_GRAB]: 0.3, [K_MISS]: 0.3, [K_FAIL]: 0.12, [K_LEAVE]: 1 };
   const K_ARM = 26, K_START_DX = 44, K_CHASE_DX = 36, K_GAP_MIN = 1.0, K_GAP_VAR = 1.2, K_RETRY_R = 55, K_NOTICE_DX = 84, K_EVADE_PX = 17, K_HANG = 44;
   const KONG_MS_MIN = 24000, KONG_MS_MAX = 56000;   // between two visits: about half as often as before, so it stays a treat
-  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now|squid=/.test(location.search)) ? 1500 : 10000;
-  const forcedKind = s => { const q = typeof location !== "undefined" ? location.search : ""; return /squid=1/.test(q) ? 1 : /squid=0/.test(q) ? 0 : nextRandom(s) % 100 < 50 ? 1 : 0; };   // each visit: the ape or the squid, by lot (?squid=1 / ?squid=0 force one)
+  const kongFirstMs = () => (typeof location !== "undefined" && /kong=now|squid=|octopus=/.test(location.search)) ? 1500 : 10000;
+  const forcedKind = s => { const q = typeof location !== "undefined" ? location.search : ""; if (/octopus=1/.test(q)) return 2; if (/squid=1/.test(q)) return 1; if (/squid=0/.test(q)) return 0; const r = nextRandom(s) % 100; return r < 34 ? 0 : r < 67 ? 1 : 2; };   // each visit: the ape, the squid or the octopus, by lot (?squid=1, ?squid=0, ?octopus=1 force one)
   // The monster from the Space Invaders cabinet art: a black, hairy beast with horn-like ears, shoulders hunched up around a
   // small head, glowing yellow eyes (no pupils) and a red rim light on its left edge. Drawn from a silhouette (spans per row).
   const SPANS = [
@@ -146,17 +146,17 @@ const FV = (() => {
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
+      if (musicOk && !s.bomber && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
         // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
         // it only bluffs (the display, no reach at all).
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
         k.doThreat = nextRandom(s) % 100 < 55; k.noReach = nextRandom(s) % 100 < 12;
-        k.kind = forcedKind(s);
+        k.kind = forcedKind(s); if (SPEC[k.kind]) k.x += SPEC[k.kind].pad;
         if (typeof location !== "undefined" && /pink=1/.test(location.search) && k.kind === 0) k.pal = 6;   // ?pink=1: the ape always comes in shocking pink, to look at it
-        if (k.kind === 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = (typeof location !== "undefined" && /pink=1/.test(location.search)) ? 6 : pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
+        if (k.kind >= 1) { k.doThreat = false; k.chase = false; k.noReach = false; k.pal = (typeof location !== "undefined" && /pink=1/.test(location.search)) ? 6 : pickSquidPal(s); k.doPre = nextRandom(s) % 100 < 60; k.doPost = nextRandom(s) % 100 < 50; k.maxTries = 2; k.sc = 0; k.legs = [0, 0]; k.rise = 0; k.preDone = k.postDone = false; } }   // each visit, by lot: a reach before the fighter passes (6 in 10) and another after it has passed (5 in 10), alone or together
       return evadeTgt;
     }
-    if (k.kind === 1) return updateSquid(s, now, dt, shipCx, shipCy);
+    if (k.kind >= 1) return updateSquid(s, now, dt, shipCx, shipCy);
     k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
     const [shx, shy] = kongShoulder(k);
     if (k.ph === K_WALK) {
@@ -236,7 +236,7 @@ const FV = (() => {
     const k = s.k;
     KC = KCS[k.pal] || KCS[0];
     if (k.ph === K_IDLE) return;
-    if (k.kind === 1) return renderSquid(s, now, front);
+    if (k.kind >= 1) return renderSquid(s, now, front);
     const fail = k.ph === K_FAIL, tr = Math.floor(now / 70) & 1;
     // stomping tantrum: the whole body hops and shakes
     const stomp = fail ? Math.abs(Math.sin(now * 0.012)) : 0;
@@ -339,9 +339,23 @@ const FV = (() => {
     0: { d1: [-20, -2], d2: [-6, 4], o: [-7, 2] }, 1: { d1: [-16, 2], d2: [-6, 5], o: [-6, 8] } };
   const SQUID_PAL_PERCENT = [9, 10, 24, 9, 34, 9, 5];   // yellow and green most often, the shocking-pink one visit in twenty (sums to 100)
   const pickSquidPal = s => { let r = nextRandom(s) % 100, i = 0; while (i < SQUID_PAL_PERCENT.length - 1 && r >= SQUID_PAL_PERCENT[i]) r -= SQUID_PAL_PERCENT[i++]; return i; };
+  // ---- the octopus, the third monster (from the user's sketch): a tall egg of a head with two small slanted eyes low on it, a narrow neck, and eight
+  // tentacles that hang packed together under it and then lie far out along the ground to both sides, the outer ones with their tips curled up.
+  // It plays like the squid (same reach, same palettes); only the shape differs. ----
+  const OC_WID = [5, 9, 11, 13, 15, 15, 17, 17, 17, 17, 17, 15, 15, 13, 13, 11, 9, 9, 7, 7];   // 20 rows, odd widths so it is centred
+  const OC_EYES = { 14: [8, 14], 15: [9, 13] };   // two small slanted eyes, the inner ends lower
+  const OC_BASE = OC_WID.map((w, r) => Array.from({ length: KONG_W }, (_, c) => {
+    const m = (KONG_W - w) / 2; if (c < m || c >= m + w) return ".";
+    if (OC_EYES[r] && OC_EYES[r].includes(c)) return "E";
+    return c - m < 2 ? "B" : "K";   // a lit band two dots wide along the left edge
+  }));
+  const SPEC = [null,
+    { base: SQ_BASE, neck: SQ_NECK, root: SQ_ROOT, flare: SQ_FLARE, endx: SQ_ENDX, endy: SQ_ENDY, n: 7, pad: 0 },
+    { base: OC_BASE, neck: [11, 20], root: [-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5], flare: [14, 11, 8, 5, 5, 8, 11, 14], endx: [-22, -13, -8, -4, 4, 8, 13, 22], endy: [-3, 1, -1, 2, 2, -1, 1, -3], n: 8, pad: 40 }];
+  const specOf = k => SPEC[k.kind] || SPEC[1];   // pad: how far its tentacles lie out beyond the body (px), so it comes in and goes out without a pop
   const SQ_RISE_PX = 6;   // two dots
   const squidTop = (k, now) => H - KH - 2 - Math.round(SQ_RISE_PX * (k.rise || 0));   // it floats: it rises while the fighter is ahead of it (to its left), and sinks back once the fighter has passed
-  const squidNeck = (k, now) => [Math.round(k.x) + SQ_NECK[0] * DOT + 1, squidTop(k, now) + SQ_NECK[1] * DOT];
+  const squidNeck = (k, now) => [Math.round(k.x) + specOf(k).neck[0] * DOT + 1, squidTop(k, now) + specOf(k).neck[1] * DOT];
   const SQ_REACH_DOTS = 34;   // it goes for the fighter when it is this close (dots) to the neck
   const squidPick = (dxd, dyd) => (dyd < -13 && Math.abs(dxd) <= 12 ? 0 : dxd < 0 ? 1 : 2);
   const squidNear = (dxd, dyd, k) => Math.hypot(dxd, dyd) <= SQ_REACH_DOTS && Math.abs(dxd) <= SQ_REACH_DOTS && k.x < W - KW - 6;
@@ -351,12 +365,12 @@ const FV = (() => {
     const dxd = (shipCx - nx) / DOT;
     k.flip = Math.abs(dxd) < 4 ? nextRandom(s) % 2 : dxd < 0 ? 0 : 1;   // fighter above: the tentacles go up the side it is on
     const aimLeft = k.sc === 1 || (k.sc === 0 && !k.flip);   // the fighter's side: the left pair or the right pair
-    k.legs = nextRandom(s) % 100 < 50 ? (aimLeft ? [0, 1, 6, 5] : [6, 5, 0, 1]) : (aimLeft ? [0, 1] : [6, 5]);   // half of the reaches use both sides, half only the fighter's side
+    const nn = specOf(k).n; k.legs = nextRandom(s) % 100 < 50 ? (aimLeft ? [0, 1, nn - 1, nn - 2] : [nn - 1, nn - 2, 0, 1]) : (aimLeft ? [0, 1] : [nn - 1, nn - 2]);   // half of the reaches use both sides, half only the fighter's side
   }
   function updateSquid(s, now, dt, shipCx, shipCy) {
     const k = s.k; let evade = 0;
     k.x -= SCROLL_PX_S * (K_SPEED[k.ph] || 1) * dt;
-    k.rise += ((shipCx < Math.round(k.x) + SQ_NECK[0] * DOT ? 1 : 0) - k.rise) * (1 - Math.exp(-dt / 1.0));   // slowly up while the fighter is to its left, slowly down once it has passed
+    k.rise += ((shipCx < Math.round(k.x) + specOf(k).neck[0] * DOT ? 1 : 0) - k.rise) * (1 - Math.exp(-dt / 1.0));   // slowly up while the fighter is to its left, slowly down once it has passed
     const [nx, ny] = squidNeck(k, now), dxd = (shipCx - nx) / DOT, dyd = (shipCy - ny) / DOT;
     if (k.ph === K_WALK || (k.ph === K_LEAVE && k.t >= 0.6)) {   // (once the tentacles are back from a reach, it may reach again)
       if (squidNear(dxd, dyd, k)) {
@@ -373,13 +387,13 @@ const FV = (() => {
         k.ph = K_LEAVE; k.t = 0; k.face = "calm";                         // the tentacles are drawn back
       }
     }
-    if (k.x < -KW - 4) { k.ph = K_IDLE; k.nextMs = now + (/squid=/.test(location.search) ? 2500 : KONG_MS_MIN + nextRandom(s) % (KONG_MS_MAX - KONG_MS_MIN)); }   // ?squid=1 for a quick look: one visit after another
+    if (k.x < -KW - 4 - specOf(k).pad) { k.ph = K_IDLE; k.nextMs = now + (/squid=|octopus=/.test(location.search) ? 2500 : KONG_MS_MIN + nextRandom(s) % (KONG_MS_MAX - KONG_MS_MIN)); }   // ?squid=1 for a quick look: one visit after another
     return evade;
   }
   const bez3 = (p, u) => { const a = (1 - u) ** 3, b = 3 * u * (1 - u) ** 2, c = 3 * u * u * (1 - u), d = u ** 3; return [a * p[0][0] + b * p[1][0] + c * p[2][0] + d * p[3][0], a * p[0][1] + b * p[1][1] + c * p[2][1] + d * p[3][1]]; };
   // one tentacle: 4 dots thick, then 3, then a 2 dot tip; the lit edge on its left; drawn on the body's own dot grid (gx, gy)
   const mixc = (a, b, t) => rgb(Math.round((a & 255) * (1 - t) + (b & 255) * t), Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t), Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t));
-  function drawSquidLeg(p, gx, gy, rest) {
+  function drawSquidLeg(p, gx, gy, rest, neckX) {
     const lit = KC.armEdge, dark = KC.arm, mid = mixc(lit, dark, 0.55);   // three tones: a lit edge, a half tone, and the dark; now and then a dot falls into shadow
     const len = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) + Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1]) + Math.hypot(p[3][0] - p[2][0], p[3][1] - p[2][1]);
     const steps = Math.max(8, Math.ceil(len / DOT * 1.6));
@@ -391,30 +405,30 @@ const FV = (() => {
         const o = (j - (w >> 1)) * DOT, px_ = flat ? cx : cx + o, py_ = flat ? cy + o : cy;
         let col = j === 0 ? lit : j === 1 && w > 2 ? mid : dark;
         const cc = Math.round((px_ - gx) / DOT), h = (Math.imul(cc, 73856093) ^ Math.imul(Math.round((py_ - gy) / DOT), 19349663)) >>> 0;
-        if (rest && !flat) { const m = ((cc - SQ_NECK[0]) % 3 + 3) % 3; col = m === 0 ? dark : m === 1 ? mid : lit; }   // hanging, side by side: shadow in straight vertical lines, one every third column
+        if (rest && !flat) { const m = ((cc - neckX) % 3 + 3) % 3; col = m === 0 ? dark : m === 1 ? mid : lit; }   // hanging, side by side: shadow in straight vertical lines, one every third column
         else if (h % 5 === 0 && col !== dark) col = col === lit ? mid : dark;   // a fleck of shadow here and there
         dot(px_, py_, col);
       }
     }
   }
   function renderSquid(s, now, front) {   // the body and the resting tentacles behind the terrain; only the tentacles that move, in front of everything
-    const k = s.k, bx = Math.round(k.x), by = squidTop(k, now);
-    if (!front) for (let r = 0; r < SQ_BASE.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = SQ_BASE[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, ch === "M" ? mixc(KC.E, KC.K, 0.4) : KC[ch]); }
-    const [nx, ny] = [bx + SQ_NECK[0] * DOT + 1, by + SQ_NECK[1] * DOT];
+    const k = s.k, bx = Math.round(k.x), by = squidTop(k, now), sp = specOf(k);
+    if (!front) for (let r = 0; r < sp.base.length; r++) for (let c = 0; c < KONG_W; c++) { const ch = sp.base[r][c]; if (ch !== ".") dot(bx + c * DOT, by + r * DOT, ch === "M" ? mixc(KC.E, KC.K, 0.4) : KC[ch]); }
+    const [nx, ny] = [bx + sp.neck[0] * DOT + 1, by + sp.neck[1] * DOT];
     const reaching = k.ph === K_REACH || k.ph === K_GRAB || k.ph === K_MISS;
     const w = k.ph === K_REACH ? ease3(k.t / K_DUR[K_REACH]) : reaching ? 1 : k.ph === K_LEAVE && k.tx ? 1 - ease3(k.t / 0.5) : 0;   // 0 at rest ... 1 stretched out
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < sp.n; i++) {
       const moving = w > 0 && k.legs.includes(i);
       if (moving !== front) continue;   // resting legs are drawn with the body (behind), moving ones in front
-      const R0 = [nx + SQ_ROOT[i] * DOT, ny], gy = H - 8;
+      const R0 = [nx + sp.root[i] * DOT, ny], gy = H - 8;
       // at rest: hanging straight down to the ground, where it is bent like a knee and lies along it (the tips stay on the ground when the body rises)
-      let p = [R0, [R0[0], gy - SQ_FLARE[i]], [R0[0] + SQ_ENDX[i] * 0.2 * DOT, gy], [R0[0] + SQ_ENDX[i] * DOT, gy + SQ_ENDY[i] * DOT]];   // a packed bundle, flaring out like a trumpet (the outer ones start higher) and lying on the ground   // straight down, then a sharp knee (both middle points on the corner), then flat along the ground
+      let p = [R0, [R0[0], gy - sp.flare[i]], [R0[0] + sp.endx[i] * 0.2 * DOT, gy], [R0[0] + sp.endx[i] * DOT, gy + sp.endy[i] * DOT]];   // a packed bundle, flaring out like a trumpet (the outer ones start higher) and lying on the ground   // straight down, then a sharp knee (both middle points on the corner), then flat along the ground
       if (moving) {
-        const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * DOT, T[1] + sc.o[1] * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
+        const sc = (k.sc === 0 && k.flip ? SQ_OVER_FLIP : SQ_SC[k.sc])[i === 0 ? 0 : i === 1 ? 1 : i === sp.n - 2 ? 5 : 6], T = [k.tx, k.ty], q2 = [T[0] + sc.o[0] * DOT, T[1] + sc.o[1] * DOT], wob = Math.sin(now * 0.009 + i) * 0.8 * DOT * w;
         const r = [R0, [nx + sc.d1[0] * DOT, ny + sc.d1[1] * DOT], [q2[0] + sc.d2[0] * DOT + wob, q2[1] + sc.d2[1] * DOT], q2];
         p = p.map((v, n) => [v[0] + (r[n][0] - v[0]) * w, v[1] + (r[n][1] - v[1]) * w]);
       }
-      drawSquidLeg(p, bx, by, !moving);
+      drawSquidLeg(p, bx, by, !moving, sp.neck[0]);
     }
   }
 
@@ -457,8 +471,8 @@ const FV = (() => {
   // Is there a part of the monster at the screen point x, y? The ape's silhouette or the squid's head (the tentacles let light through).
   function monsterAt(k, now, x, y) {
     if (k.ph === K_IDLE) return false;
-    const bx = Math.round(k.x), by = k.kind === 1 ? squidTop(k, now) : H - KH, c = Math.floor((x - bx) / DOT), r = Math.floor((y - by) / DOT);
-    const rows = k.kind === 1 ? SQ_BASE : KONG_BASE;
+    const bx = Math.round(k.x), by = k.kind >= 1 ? squidTop(k, now) : H - KH, c = Math.floor((x - bx) / DOT), r = Math.floor((y - by) / DOT);
+    const rows = k.kind >= 1 ? specOf(k).base : KONG_BASE;
     return r >= 0 && r < rows.length && c >= 0 && c < KONG_W && rows[r][c] !== ".";
   }
   function renderLights(s, now) {
@@ -566,6 +580,95 @@ const FV = (() => {
     }
   }
 
+  /* ---- BOMBER (trial): a silver heavy bomber like a B-29 Superfortress, as long as the screen is wide (80 dots, 240 px), crossing the sky from the right
+     to the left slowly, like a boss. It stays behind the terrain and the monsters, drops bombs from its belly that crater the terrain, and the fighter's
+     lasers stop on its skin in sparks; after a few hits an engine smokes, then burns. Rare, and only while music plays, never together with a monster
+     or in the meteor zone. It does not fall: it is a boss to watch pass. ?bomber=now shows one at once. ---- */
+  const BM_W = 80, BM_H = 18, BM_Y = 14, BM_SPEED = 24;                     // dots, dots, px from the top, px/s
+  const BM_FIRST_MS = 45000, BM_GAP_MIN = 100000, BM_GAP_VAR = 80000;       // the first one after 45 s of music, then one every 100 to 180 s (plus the 20 s it takes to cross)
+  const bmNow = () => typeof location !== "undefined" && /bomber=now/.test(location.search);
+  const BM_ENGINES = [{ x: 22, y: 5, near: false }, { x: 37, y: 4, near: false }, { x: 19, y: 14, near: true }, { x: 34, y: 14, near: true }];   // propeller x, y (dots)
+  const BM_ART = (() => {
+    const g = Array.from({ length: BM_H }, () => Array(BM_W).fill("."));
+    const set = (x, y, c) => { if (x >= 0 && x < BM_W && y >= 0 && y < BM_H) g[y][x] = c; };
+    const yc = 10;
+    const rad = x => x < 9 ? 1.2 + 2.9 * Math.sqrt(x / 9) : x <= 50 ? 4.1 : Math.max(1, 4.1 - (x - 50) / 29 * 3.2);
+    const nacelle = (x0, y0, w, h) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, y === y0 ? "S" : y === y0 + h - 1 ? "D" : "M"); };
+    for (let x = 28; x <= 49; x++) { const y = 7 - Math.floor((x - 28) * 0.2); set(x, y, "D"); set(x, y + 1, "M"); }   // the far wing, raised toward the back
+    nacelle(23, 4, 8, 3); nacelle(38, 3, 8, 3);                                                                         // the two far engines
+    for (let x = 60; x < BM_W; x++) {                                                                                  // the tall tail fin
+      const top = x < 71 ? Math.round(yc - 4 - (x - 60) * (yc - 4 - 0) / 11) : 0;
+      for (let y = top; y <= yc - 2; y++) set(x, y, x === 60 || y === top ? "S" : "M");
+    }
+    for (let x = 0; x < BM_W; x++) {                                                                                  // the fuselage: a long cigar, lit from above
+      const r = rad(x);
+      for (let y = Math.round(yc - r); y <= Math.round(yc + r); y++) set(x, y, y < yc - r * 0.35 ? "S" : y > yc + r * 0.45 ? "D" : "M");
+    }
+    for (let x = 0; x < 4; x++) for (let y = yc - 1; y <= yc + 1; y++) if (g[y][x] !== ".") set(x, y, "G");           // the glazed nose
+    for (let x = 4; x <= 10; x++) for (let y = yc - 3; y <= yc - 1; y++) if (g[y][x] !== ".") set(x, y, "G");           // the cockpit windows
+    for (let x = 14; x <= 15; x++) set(x, yc - 5, "G");                                                                 // a gun blister on top
+    for (let x = 26; x <= 28; x++) set(x, yc - 5, "M");
+    for (let x = 24; x <= 50; x++) { set(x, yc + 3, "M"); set(x, yc + 4, "D"); }                                       // the near wing seen from below, a thin band
+    nacelle(20, 13, 9, 4); nacelle(35, 13, 9, 4);                                                                       // the two near engines
+    for (let x = 40; x <= 54; x++) set(x, yc + 3, "K");                                                                 // the bomb bay seam
+    for (const [x, y, c] of [[46, yc - 1, "T"], [47, yc - 1, "T"], [48, yc - 1, "T"], [46, yc, "T"], [47, yc, "B"], [48, yc, "T"], [46, yc + 1, "T"], [47, yc + 1, "T"], [48, yc + 1, "T"]]) set(x, y, c);   // the white star roundel, blue in the middle
+    set(79, yc, "G");                                                                                                   // the tail gun
+    return g;
+  })();
+  const BMC = { S: rgb(222, 230, 240), M: rgb(172, 184, 202), D: rgb(104, 116, 134), G: rgb(120, 186, 222), K: rgb(52, 60, 74), T: rgb(250, 250, 255), B: rgb(40, 80, 190) };
+  const bomberAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - BM_Y) / DOT); return r >= 0 && r < BM_H && c >= 0 && c < BM_W && BM_ART[r][c] !== "."; };
+  function updateBomber(s, now, dt, sx, sy) {
+    const b = s.bomber, k = s.k;
+    if (!b) {
+      if (s.nextBomberMs === 0) s.nextBomberMs = now + (bmNow() ? 1500 : BM_FIRST_MS);
+      const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
+      if (musicOk && k.ph === K_IDLE && !s.mz.ph && now - s.nextBomberMs >= 0) s.bomber = { x: W + 2, hits: 0, nextDrop: now + 1500, puff: 0 };
+    } else {
+      b.x -= BM_SPEED * dt;
+      const bay = Math.round(b.x) + 47 * DOT;                                    // under the belly, at the bomb bay
+      if (now >= b.nextDrop && bay > 14 && bay < W - 14) {
+        b.nextDrop = now + 1000 + nextRandom(s) % 900;
+        if (s.bb.length < 8) s.bb.push({ x: bay, y: BM_Y + 14 * DOT, vx: -BM_SPEED, vy: 0 });
+      }
+      b.puff -= dt;                                                              // smoke from the engines that have been hit: more hits, more engines
+      if (b.puff <= 0 && b.hits >= 3) {
+        b.puff = 0.1;
+        const n = b.hits >= 9 ? 3 : b.hits >= 6 ? 2 : 1;
+        for (let i = 0; i < n; i++) { const e = BM_ENGINES[[2, 0, 3][i]]; s.smoke.push({ x: Math.round(b.x) + (e.x + 6) * DOT, y: BM_Y + e.y * DOT, age: 0, fire: i === 2 && b.hits >= 9 }); }
+      }
+      if (b.x < -BM_W * DOT - 4) { s.bomber = null; s.nextBomberMs = now + (bmNow() ? 3000 : BM_GAP_MIN + nextRandom(s) % BM_GAP_VAR); }
+    }
+    const off = scrollOffset(s, now);
+    for (const q of s.bb) {                                                      // the bombs: they keep the bomber's speed and fall in an arc
+      q.x += q.vx * dt; q.y += q.vy * dt + 0.5 * BOMB_G * dt * dt; q.vy += BOMB_G * dt;
+      const bx = Math.trunc(q.x), ground = H - heightAt(s, bx, off);
+      if (q.x > sx - DOT && q.x < sx + SHIP_W && q.y + 2 * DOT > sy && q.y < sy + SHIP_H) { q.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, q.y, false); }   // on the fighter: the shield takes it
+      else if (q.y + 2 * DOT - 1 >= ground) { q.dead = true; const i = colAt(bx + 1, off); carve(s, i, CRATER_SEG + 1); carve(s, i - 1, 2); carve(s, i + 1, 2); freeBurst(s, bx, ground - 1, false); }
+      else if (bx < -DOT) q.dead = true;
+    }
+    s.bb = s.bb.filter(q => !q.dead);
+    for (const p of s.smoke) { p.age += dt; p.y -= 9 * dt; }
+    s.smoke = s.smoke.filter(p => p.age < 1.3);
+  }
+  function renderBomber(s, now) {
+    const b = s.bomber; if (!b) return;
+    const bx = Math.round(b.x), flick = Math.floor(now / 55) & 1;
+    for (let r = 0; r < BM_H; r++) for (let c = 0; c < BM_W; c++) {
+      const x = bx + c * DOT; if (x + DOT <= 0 || x >= W) continue;
+      const ch = BM_ART[r][c]; if (ch !== ".") dot(x, BM_Y + r * DOT, BMC[ch]);
+    }
+    for (const e of BM_ENGINES) {                                                // the propellers: a flickering blur
+      const x = bx + e.x * DOT; if (x + DOT <= 0 || x >= W) continue;
+      const h = flick ? 2 : 1;
+      for (let dy = -h; dy <= h; dy++) dot(x, BM_Y + (e.y + dy) * DOT, flick ? rgb(196, 206, 222) : rgb(140, 152, 170));
+    }
+    for (const p of s.smoke) {                                                   // smoke from the hit engines, left behind; the last engine burns
+      const f = Math.max(0, 1 - p.age / 1.3), v = Math.round(40 + 110 * f);
+      dot(p.x + Math.round(p.age * 6), Math.round(p.y), p.fire && p.age < 0.5 ? ((Math.floor(now / 70) & 1) ? rgb(255, 150, 40) : rgb(255, 80, 20)) : rgb(v, v, v + 4));
+    }
+  }
+  function renderBomberBombs(s) { for (const q of s.bb) { dot(Math.trunc(q.x) - 1, Math.trunc(q.y), rgb(70, 74, 86)); dot(Math.trunc(q.x) - 1, Math.trunc(q.y) + DOT, rgb(230, 234, 242)); } }
+
   /* ---- CITY (trial): now and then three buildings of different heights, built together, flow by with the terrain (they do not react to
      the sound), and small people wait on their roofs, waving for help. They are the runner of SOUND TERRARIUM (a 10 x 11 px white figure
      with a black outline, drawn pixel by pixel). The fighter flies to the nearest one waiting ahead, and when it overlaps a person that
@@ -619,7 +722,7 @@ const FV = (() => {
       if (!collapsed && rnd(100) < 18) b.fire = [0, 9][rnd(2)];
       if (!collapsed && f >= 3 && rnd(100) < 40) { b.win = { fl: rnd(f - 1), c: 1 }; b.lit[b.win.fl * 3 + 1] = 1; b.win.ph = rnd(7); }   // somebody leans out of a lit window, waving       // a fire on a broken corner
       g.b.push(b);
-      if (!collapsed && rnd(100) < 45) g.p.push({ bi: i, ox: 2 + rnd(CITY_W * DOT - PERSON_W - 3), ph: rnd(7), saved: false });
+      if (!collapsed && !b.win && rnd(100) < 45) g.p.push({ bi: i, ox: 2 + rnd(CITY_W * DOT - PERSON_W - 3), ph: rnd(7), saved: false });
     }
     return g;
   }
@@ -659,7 +762,7 @@ const FV = (() => {
       if (s.citAcc <= 0) {
         const ok = g.b.filter(b => !b.collapsed && b.f >= 2 && Math.round(g.x) + b.ox + 5 * DOT > 110 && Math.round(g.x) + b.ox + 5 * DOT < W - 20);
         if (ok.length && s.cit.length < 4) {
-          const b = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 3, x0 = Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2;
+          const b = ok[nextRandom(s) % ok.length], n = 1 + nextRandom(s) % 3, x0 = Math.round(g.x) + b.ox + 5 * DOT - PERSON_W / 2;
           for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });   // stop: how near the fighter it runs before it stops; back: after the ground has carried it off to the left it runs back to the middle of the screen and waves again
         }
         s.citAcc = 5 + (nextRandom(s) % 50) / 10;
@@ -736,7 +839,7 @@ const FV = (() => {
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0,
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, bomber: null, nextBomberMs: 0, bb: [], smoke: [],
     mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
@@ -968,6 +1071,7 @@ const FV = (() => {
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
     updateCity(s, now, dt, sx, sy);
+    updateBomber(s, now, dt, sx, sy);
 
     for (const m of s.m) {
       if (!m.on) continue;
@@ -977,6 +1081,9 @@ const FV = (() => {
       const tail = m.x + (m.age > LASER_HOLD_S ? (m.age - LASER_HOLD_S) * LASER_TAIL_PX_S : 0);
       if (tail >= m.head) { m.on = false; continue; }
       if (m.stopped && from >= m.head) continue;
+      if (s.bomber && !m.stopped) {   // the laser stops on the bomber's skin, in sparks
+        for (let hx = Math.floor(from); hx <= m.head; hx += 2) if (bomberAt(s.bomber, hx, m.y + 1)) { m.head = hx; m.stopped = true; s.bomber.hits++; freeBurst(s, hx, m.y, false); break; }
+      }
       let hit = null;
       for (const e of s.e) {
         if (!e.on || !formed(e) || e.x + enemyW(e) <= from || e.x >= m.head) continue;
@@ -1134,6 +1241,7 @@ const FV = (() => {
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
       for (let t = Math.round(s.mz.u * (st.near ? 10 : 4)); t > 0; t--) px(x + 1 + t, y, c);
     }
+    renderBomber(s, now);                                  // the bomber: in the sky, behind everything but the stars
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
     for (let i = 0; i < COLS; i++) {
@@ -1211,6 +1319,7 @@ const FV = (() => {
       }
     }
     for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
+    renderBomberBombs(s);
 
   }
 
