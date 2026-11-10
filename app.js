@@ -499,7 +499,7 @@ const FV = (() => {
   const MZ_IN_S = 1.5, MZ_RUN_S = 17, MZ_OUT_S = 2, MZ_FIRST_MS = 90000, MZ_MS_MIN = 120000, MZ_MS_MAX = 240000, MZ_SEG = 7, MZ_WARP_PX_S = 260;
   const MZ_MAX = 40, MZ_DUST_MAX = 18, MZ_RATE_MIN = 3, MZ_RATE_MAX = 12, MZ_DUST_RATE = 14, MZ_GAP = 8;
   const MZ_SIZE = [{ r: 2, vMin: 170, vMax: 240, tail: 6 }, { r: 4, vMin: 220, vMax: 300, tail: 10 }, { r: 6, vMin: 280, vMax: 360, tail: 15 }];
-  const meteorNow = () => typeof location !== "undefined" && /meteor=now/.test(location.search);
+  const meteorNow = () => typeof location !== "undefined" && /meteor=now|bomber=now/.test(location.search);
   const mzTop = () => TOP + 6, mzBottom = () => H - MZ_SEG * SEG_PITCH - SHIP_H - 6;
   const mzPath = (s, ms) => { const t = ms * 0.001 + s.mz.ph0, mid = (mzTop() + mzBottom()) / 2, a = (mzBottom() - mzTop()) / 2;
     return mid + a * (0.62 * Math.sin(t * 1.1) + 0.38 * Math.sin(t * 2.3 + 1)); };
@@ -524,6 +524,7 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.acc = 0; z.dustAcc = 0; z.ph0 = (nextRandom(s) % 628) / 100;
+        if (bmNow() || nextRandom(s) % 100 < BM_ZONE_PCT) s.bomber = { x: W + 2, hits: 0, nextDrop: now + 2500, puff: 0 };   // the bomber comes in with the zone
         k.nextMs = Math.max(k.nextMs, now + (MZ_IN_S + MZ_RUN_S + MZ_OUT_S) * 1000 + 8000);
       }
     }
@@ -533,7 +534,7 @@ const FV = (() => {
     else if (z.ph === 2 && z.t >= MZ_RUN_S) { z.ph = 3; z.t = 0; }
     else if (z.ph === 3) {
       z.u = Math.max(0, 1 - z.t / MZ_OUT_S);
-      if (z.t >= MZ_OUT_S && s.met.length === 0) {
+      if (z.t >= MZ_OUT_S && s.met.length === 0 && !s.bomber) {
         z.ph = 0; z.u = 0; s.nextLightMs = Math.max(s.nextLightMs, now + 6000);
         z.nextMs = now + (meteorNow() ? 8000 : MZ_MS_MIN + nextRandom(s) % (MZ_MS_MAX - MZ_MS_MIN));
       }
@@ -550,9 +551,12 @@ const FV = (() => {
       z.dustAcc -= 1;
       if (s.dust.length < MZ_DUST_MAX) s.dust.push({ x: W + 8, y: TOP + nextRandom(s) % (H - TOP - MZ_SEG * SEG_PITCH), v: 340 + nextRandom(s) % 200, len: 10 + nextRandom(s) % 18 });
     }
-    for (const m of s.met) { m.x -= m.v * dt; m.y += m.vy * dt; }
+    for (const m of s.met) {
+      m.x -= m.v * dt; m.y += m.vy * dt;
+      if (s.bomber && m.size === 2 && bomberAt(s.bomber, m.x, m.y)) { m.dead = true; s.bomber.hits++; freeBurst(s, m.x, m.y, false); }   // a big meteor strikes the bomber: sparks, and the damage adds up
+    }
     for (const d of s.dust) d.x -= d.v * dt;
-    s.met = s.met.filter(m => m.x > -MZ_SIZE[m.size].tail * DOT - 8);
+    s.met = s.met.filter(m => !m.dead && m.x > -MZ_SIZE[m.size].tail * DOT - 8);
     s.dust = s.dust.filter(d => d.x > -d.len);
     const w = MZ_WARP_PX_S * z.u * dt;   // whatever was on screen falls behind
     for (const e of s.e) if (e.on) e.x -= w;
@@ -580,12 +584,13 @@ const FV = (() => {
     }
   }
 
-  /* ---- BOMBER (trial): a silver heavy bomber like a B-29 Superfortress, as long as the screen is wide (80 dots, 240 px), crossing the sky from the right
-     to the left slowly, like a boss. It stays behind the terrain and the monsters, drops bombs from its belly that crater the terrain, and the fighter's
-     lasers stop on its skin in sparks; after a few hits an engine smokes, then burns. Rare, and only while music plays, never together with a monster
-     or in the meteor zone. It does not fall: it is a boss to watch pass. ?bomber=now shows one at once. ---- */
-  const BM_W = 80, BM_H = 18, BM_Y = 14, BM_SPEED = 24;                     // dots, dots, px from the top, px/s
-  const BM_FIRST_MS = 45000, BM_GAP_MIN = 100000, BM_GAP_VAR = 80000;       // the first one after 45 s of music, then one every 100 to 180 s (plus the 20 s it takes to cross)
+  /* ---- BOMBER (trial): a silver heavy bomber like a B-29 Superfortress, as long as the screen is wide (80 dots, 240 px). It belongs to the meteor zone: when
+     the zone begins (with the terrain sinking low and the stars streaming) it crosses the sky from the right to the left slowly, taking the whole zone to do
+     it, like a boss in the distance. It is behind the meteors and the terrain, drops bombs from its belly that crater the low terrain (a hit on the fighter only
+     lights the shield), and the big meteors that strike it set it smoking, then burning, but it flies on. ?bomber=now: a meteor zone with the bomber, soon
+     and then every 8 s. ---- */
+  const BM_W = 80, BM_H = 18, BM_Y = 14, BM_SPEED = (W + 2 + BM_W * 3 + 4) / (1.5 + 17 + 2);   // dots, dots, px from the top, px/s: it takes the whole zone (about 20 s) to cross
+  const BM_ZONE_PCT = 60;                                                  // 6 meteor zones in 10 bring the bomber (always with ?bomber=now)
   const bmNow = () => typeof location !== "undefined" && /bomber=now/.test(location.search);
   const BM_ENGINES = [{ x: 22, y: 5, near: false }, { x: 37, y: 4, near: false }, { x: 19, y: 14, near: true }, { x: 34, y: 14, near: true }];   // propeller x, y (dots)
   const BM_ART = (() => {
@@ -618,12 +623,8 @@ const FV = (() => {
   const BMC = { S: rgb(222, 230, 240), M: rgb(172, 184, 202), D: rgb(104, 116, 134), G: rgb(120, 186, 222), K: rgb(52, 60, 74), T: rgb(250, 250, 255), B: rgb(40, 80, 190) };
   const bomberAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - BM_Y) / DOT); return r >= 0 && r < BM_H && c >= 0 && c < BM_W && BM_ART[r][c] !== "."; };
   function updateBomber(s, now, dt, sx, sy) {
-    const b = s.bomber, k = s.k;
-    if (!b) {
-      if (s.nextBomberMs === 0) s.nextBomberMs = now + (bmNow() ? 1500 : BM_FIRST_MS);
-      const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
-      if (musicOk && k.ph === K_IDLE && !s.mz.ph && now - s.nextBomberMs >= 0) s.bomber = { x: W + 2, hits: 0, nextDrop: now + 1500, puff: 0 };
-    } else {
+    const b = s.bomber;
+    if (b) {
       b.x -= BM_SPEED * dt;
       const bay = Math.round(b.x) + 47 * DOT;                                    // under the belly, at the bomb bay
       if (now >= b.nextDrop && bay > 14 && bay < W - 14) {
@@ -631,12 +632,12 @@ const FV = (() => {
         if (s.bb.length < 8) s.bb.push({ x: bay, y: BM_Y + 14 * DOT, vx: -BM_SPEED, vy: 0 });
       }
       b.puff -= dt;                                                              // smoke from the engines that have been hit: more hits, more engines
-      if (b.puff <= 0 && b.hits >= 3) {
+      if (b.puff <= 0 && b.hits >= 2) {
         b.puff = 0.1;
-        const n = b.hits >= 9 ? 3 : b.hits >= 6 ? 2 : 1;
-        for (let i = 0; i < n; i++) { const e = BM_ENGINES[[2, 0, 3][i]]; s.smoke.push({ x: Math.round(b.x) + (e.x + 6) * DOT, y: BM_Y + e.y * DOT, age: 0, fire: i === 2 && b.hits >= 9 }); }
+        const n = b.hits >= 6 ? 3 : b.hits >= 4 ? 2 : 1;
+        for (let i = 0; i < n; i++) { const e = BM_ENGINES[[2, 0, 3][i]]; s.smoke.push({ x: Math.round(b.x) + (e.x + 6) * DOT, y: BM_Y + e.y * DOT, age: 0, fire: i === 2 && b.hits >= 6 }); }
       }
-      if (b.x < -BM_W * DOT - 4) { s.bomber = null; s.nextBomberMs = now + (bmNow() ? 3000 : BM_GAP_MIN + nextRandom(s) % BM_GAP_VAR); }
+      if (b.x < -BM_W * DOT - 4) s.bomber = null;
     }
     const off = scrollOffset(s, now);
     for (const q of s.bb) {                                                      // the bombs: they keep the bomber's speed and fall in an arc
@@ -839,7 +840,7 @@ const FV = (() => {
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, bomber: null, nextBomberMs: 0, bb: [], smoke: [],
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, bomber: null, bb: [], smoke: [],
     mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
@@ -1020,7 +1021,7 @@ const FV = (() => {
   const freeBurst = (s, x, y, pop) => { for (const b of s.x) if (!b.on) { Object.assign(b, { x, y, age: 0, on: true, pop }); return; } };
 
   function update(s, now) {
-    let dt = (now - s.lastFrameMs) * 0.001; if (dt > 0.2) dt = 0.2;
+    let dt = (now - s.lastFrameMs) * 0.001; if (dt > 0.2) dt = 0.2; if (dt < 0) dt = 0;   // never backwards (a stale state used with an older clock would otherwise blow the tentacle code up)
     s.lastFrameMs = now;
     const off = scrollOffset(s, now);
 
@@ -1081,9 +1082,6 @@ const FV = (() => {
       const tail = m.x + (m.age > LASER_HOLD_S ? (m.age - LASER_HOLD_S) * LASER_TAIL_PX_S : 0);
       if (tail >= m.head) { m.on = false; continue; }
       if (m.stopped && from >= m.head) continue;
-      if (s.bomber && !m.stopped) {   // the laser stops on the bomber's skin, in sparks
-        for (let hx = Math.floor(from); hx <= m.head; hx += 2) if (bomberAt(s.bomber, hx, m.y + 1)) { m.head = hx; m.stopped = true; s.bomber.hits++; freeBurst(s, hx, m.y, false); break; }
-      }
       let hit = null;
       for (const e of s.e) {
         if (!e.on || !formed(e) || e.x + enemyW(e) <= from || e.x >= m.head) continue;
