@@ -524,7 +524,7 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.acc = 0; z.dustAcc = 0; z.ph0 = (nextRandom(s) % 628) / 100;
-        if (crNow() || nextRandom(s) % 100 < CR_ZONE_PCT) s.cruiser = { x: W + 2, hits: 0, nextFire: now + 2500, puff: 0, volley: 0, volleyAt: 0 };   // the cruiser comes in with the zone
+        if (crNow() || nextRandom(s) % 100 < CR_ZONE_PCT) s.cruiser = { x: W + 2, hits: 0, nextFire: now + 2500, puff: 0, volley: 0, volleyAt: 0, barrage: 0, bt: 0, fired: 0, nextMissile: 0 };   // the cruiser comes in with the zone
         k.nextMs = Math.max(k.nextMs, now + (MZ_IN_S + MZ_RUN_S + MZ_OUT_S) * 1000 + 8000);
       }
     }
@@ -643,10 +643,16 @@ const FV = (() => {
   })();
   const CRC = { S: rgb(206, 212, 222), H: rgb(242, 246, 252), M: rgb(138, 146, 162), D: rgb(80, 88, 106), K: rgb(34, 38, 52), L: rgb(184, 192, 206), W: rgb(255, 222, 150), G: rgb(246, 249, 255), C: rgb(110, 226, 226), R: rgb(150, 50, 62) };
   const cruiserAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - CR_Y) / DOT); return r >= 0 && r < CR_H && c >= 0 && c < CR_W && CR_ART[r][c] !== "."; };
+  // The barrage: once in a pass, as the cruiser is about halfway across, its underside glows red for a moment, then it launches a swarm of twelve missiles
+  // in a fan toward the left (from down-left to up-left, since the terrain is low in the zone). They curve toward the fighter, trailing smoke, for a few seconds (the fighter slips away from them; a hit only lights its shield).
+  // The ordinary volleys pause meanwhile.
+  const CR_BARRAGE_X = 50, CR_WARN_S = 0.9, CR_MISSILES = 12, CR_MISSILE_GAP_S = 0.08, CR_MISSILE_LIFE = 3.4, CR_MISSILE_TURN = 1.8, CR_MISSILE_V0 = 60, CR_MISSILE_VMAX = 115;
+  const CR_BAY = [26, 60];                                                   // the launch bays, along the underside (dots)
+  const crBot = x => 17 + 7 * x / (CR_W - 1);                                // the underside's row at column x
   const cruiserEvade = (s, sx, sy) => {   // the fighter slips up or down away from a bolt that is about to reach it
-    for (const q of s.bb) {
+    for (const q of s.bb.concat(s.ms)) {
       if (Math.abs(q.vx) < 1) continue;
-      const t = (sx + SHIP_W / 2 - q.x) / q.vx;   // when the bolt gets to the fighter's x
+      const t = (sx + SHIP_W / 2 - q.x) / q.vx;   // when the bolt (or missile) gets to the fighter's x
       if (t < 0.05 || t > 0.7) continue;
       const y = q.y + q.vy * t;
       if (Math.abs(y - (sy + SHIP_H / 2)) < SHIP_H / 2 + 6) return y > sy + SHIP_H / 2 ? -K_EVADE_PX : K_EVADE_PX;
@@ -657,7 +663,15 @@ const FV = (() => {
     const b = s.cruiser;
     if (b) {
       b.x -= CR_SPEED * dt;
-      if (now >= b.nextFire) { b.nextFire = now + 1100 + nextRandom(s) % 900; b.volley = 2 + nextRandom(s) % 2; b.volleyAt = now; }   // a volley of two or three bolts, a moment apart
+      if (b.barrage === 0 && b.x <= CR_BARRAGE_X && b.volley === 0) { b.barrage = 1; b.bt = 0; }               // about halfway across: the warning
+      if (b.barrage === 1) { b.bt += dt; if (b.bt >= CR_WARN_S) { b.barrage = 2; b.fired = 0; b.nextMissile = now; } }
+      else if (b.barrage === 2 && now >= b.nextMissile) {                                                    // then twelve missiles, a moment apart, in a fan
+        const i = b.fired++, f = i / (CR_MISSILES - 1), xd = CR_BAY[0] + (CR_BAY[1] - CR_BAY[0]) * f;         // the left ones leave from the left end of the bay
+        s.ms.push({ x: Math.round(b.x) + xd * DOT, y: CR_Y + (crBot(xd) + 1.5) * DOT, th: Math.PI + (-70 + 140 * f) * Math.PI / 180, v: CR_MISSILE_V0, vx: 0, vy: 0, age: 0, trail: [], tt: 0, seed: i });
+        b.nextMissile = now + CR_MISSILE_GAP_S * 1000;
+        if (b.fired >= CR_MISSILES) { b.barrage = 3; b.nextFire = now + 2500; }                                // done: the ordinary volleys come back after a pause
+      }
+      if (b.barrage !== 1 && b.barrage !== 2 && now >= b.nextFire) { b.nextFire = now + 1100 + nextRandom(s) % 900; b.volley = 2 + nextRandom(s) % 2; b.volleyAt = now; }   // a volley of two or three bolts, a moment apart
       if (b.volley > 0 && now >= b.volleyAt) {
         b.volley--; b.volleyAt = now + 90;
         const fcx = sx + SHIP_W / 2, fcy = sy + SHIP_H / 2, guns = fcy > CR_Y + 21 * DOT ? CR_GUNS : CR_TOPGUNS;   // the guns that face the fighter
@@ -684,6 +698,23 @@ const FV = (() => {
       else if (bx < -DOT || bx > W + DOT || q.y < -DOT) q.dead = true;
     }
     s.bb = s.bb.filter(q => !q.dead);
+    for (const m of s.ms) {                                                      // the missiles: they speed up, turn weakly toward the fighter and wobble a little
+      m.age += dt;
+      const fx = sx + SHIP_W / 2, fy = sy + SHIP_H / 2;
+      let d = Math.atan2(fy - m.y, fx - m.x) - m.th; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      const turn = CR_MISSILE_TURN * dt;
+      m.th += Math.max(-turn, Math.min(turn, d)) + Math.sin(m.age * 9 + m.seed) * 0.4 * dt;
+      m.v = Math.min(CR_MISSILE_VMAX, CR_MISSILE_V0 + 60 * m.age);
+      m.vx = Math.cos(m.th) * m.v; m.vy = Math.sin(m.th) * m.v;
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      m.tt -= dt; if (m.tt <= 0) { m.tt = 0.035; m.trail.unshift({ x: m.x, y: m.y }); if (m.trail.length > 9) m.trail.pop(); }
+      const bx = Math.trunc(m.x), ground = H - heightAt(s, bx, off);
+      if (m.x > sx - DOT && m.x < sx + SHIP_W && m.y + DOT > sy && m.y < sy + SHIP_H) { m.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, m.y, false); freeBurst(s, bx - 6, m.y + 3, false); freeBurst(s, bx + 5, m.y - 4, false); }   // on the fighter: a bigger flash
+      else if (m.y + DOT >= ground) { m.dead = true; carve(s, colAt(bx + 1, off), 2); freeBurst(s, bx, ground - 1, false); }
+      else if (m.age >= CR_MISSILE_LIFE) { m.dead = true; freeBurst(s, m.x, m.y, false); }                        // it burns out in a burst
+      else if (bx < -8 || bx > W + 8 || m.y < -8) m.dead = true;
+    }
+    s.ms = s.ms.filter(m => !m.dead);
     for (const p of s.smoke) { p.age += dt; p.y -= 9 * dt; }
     s.smoke = s.smoke.filter(p => p.age < 1.3);
   }
@@ -695,6 +726,13 @@ const FV = (() => {
       const ch = CR_ART[r][c]; if (ch === ".") continue;
       dot(x, CR_Y + r * DOT, ch === "E" ? ((fr + r) & 1 ? rgb(120, 176, 255) : rgb(180, 220, 255)) : CRC[ch]);
     }
+    if (b.barrage === 1) {                                                       // the warning: the underside glows red, flickering faster toward the launch
+      const u = b.bt / CR_WARN_S, on = (Math.floor(now / (170 - 110 * u)) & 1) === 0;
+      for (let xd = CR_BAY[0] - 2; xd <= CR_BAY[1] + 2; xd++) {
+        const x = bx + xd * DOT; if (x + DOT <= 0 || x >= W) continue;
+        dot(x, CR_Y + (Math.round(crBot(xd)) + 1) * DOT, on ? rgb(255, 70, 40) : rgb(140, 28, 22));
+      }
+    }
     for (const ey of CR_ENGINES) {                                               // the engines' exhaust: a flickering streak of blue behind each
       const n = 5 + ((Math.imul(fr, 2654435761) >>> 0) + ey * 7) % 5;
       for (let k = 0; k < n; k++) {
@@ -705,6 +743,19 @@ const FV = (() => {
     for (const p of s.smoke) {                                                   // smoke from the hit places, left behind; the last one burns
       const f = Math.max(0, 1 - p.age / 1.3), v = Math.round(40 + 110 * f);
       dot(p.x + Math.round(p.age * 6), Math.round(p.y), p.fire && p.age < 0.5 ? ((Math.floor(now / 70) & 1) ? rgb(255, 150, 40) : rgb(255, 80, 20)) : rgb(v, v, v + 4));
+    }
+  }
+  function renderCruiserMissiles(s, now) {
+    for (const m of s.ms) {
+      m.trail.forEach((p, i) => {                                                // the smoke trail: older points greyer and fainter
+        const f = 1 - i / m.trail.length, v = Math.round(60 + 110 * f);
+        fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2, rgb(v, Math.max(0, v - 12), Math.max(0, v - 32)));
+      });
+      const ux = Math.cos(m.th), uy = Math.sin(m.th);
+      fillRect(Math.round(m.x - ux * 4) - 1, Math.round(m.y - uy * 4) - 1, 2, 2, rgb(255, 200, 80));   // the flame
+      fillRect(Math.round(m.x - ux * 7) - 1, Math.round(m.y - uy * 7) - 1, 2, 2, (Math.floor(now / 60) + m.seed) & 1 ? rgb(255, 110, 30) : rgb(255, 150, 50));
+      dot(Math.trunc(m.x) - 1, Math.trunc(m.y) - 1, rgb(255, 240, 205));                            // the head
+      if (m.age < 0.1) for (const [dx, dy] of [[0, 0], [-DOT, 0], [DOT, 0], [0, -DOT], [0, DOT]]) dot(Math.round(m.x) - 1 + dx, Math.round(m.y) - 1 + dy, dx || dy ? rgb(255, 150, 50) : rgb(255, 255, 255));   // the launch flash
     }
   }
   function renderCruiserBolts(s) {
@@ -886,7 +937,7 @@ const FV = (() => {
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, cruiser: null, bb: [], smoke: [],
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, cruiser: null, bb: [], ms: [], smoke: [],
     mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
@@ -1364,6 +1415,7 @@ const FV = (() => {
     }
     for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
     renderCruiserBolts(s);
+    renderCruiserMissiles(s, now);
 
   }
 
