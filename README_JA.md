@@ -4,6 +4,10 @@
 
 Cardputer ADV 版 KeySpeaker の実機デモです。240 x 135 のキャンバスに画面を実機どおりに描き、ブラウザでできる範囲で実機の動きを再現しています。HTML / CSS / JavaScript だけで動きます(`index.html` を開くか、フォルダを配信。GitHub Pages 可)。スマホのホーム画面にも追加できます(PWA)。
 
+<table>
+<tr>
+<td valign="top" width="480">
+
 ファームウェア(`KeySpeaker_S0.ino`、`FlightViz.h`、`KeyEarth.h`、`Splash.h`)から移植した画面:
 
 - **起動画面**と**待機中のエンブレム**: ファームウェアの元画像をそのまま使っています。計測モードで 1 分間キーも音もないとエンブレムに戻り、`h HELP  Fn+M KEYBOARD` を表示し、大きな拍で揺れ、キーを押すと復帰します(そのキーは復帰だけ)。
@@ -16,9 +20,14 @@ Cardputer ADV 版 KeySpeaker の実機デモです。240 x 135 のキャンバ�
 
 `Fn+M` で 計測 → 飛行 → キーボード と切り替わり、最後のモードは記憶されます(初回は飛行)。
 
-飛行モードで出会えるものの図鑑です(デモの横にも出ています。クリックすると大きく見られます)。
+</td>
+<td valign="top" width="360">
 
-<a href="assets/field-guide-ja.webp"><img src="assets/field-guide-ja.webp" alt="KeySpeaker フライト・キャラクター図鑑：大型モンスター3種、小型ターゲット6種、街、戦闘機、巡洋艦" width="420"></a>
+<a href="assets/field-guide-ja.webp"><img src="assets/field-guide-ja.webp" alt="KeySpeaker フライト・キャラクター図鑑：大型モンスター3種、小型ターゲット6種、街、戦闘機、巡洋艦" width="360"></a>
+
+</td>
+</tr>
+</table>
 
 ## 音源
 

@@ -6,6 +6,10 @@ A browser demo of the Cardputer ADV KeySpeaker, drawn pixel for pixel on a 240 x
 following the firmware's behavior as closely as a browser allows. Static HTML / CSS / JavaScript only: open `index.html`
 or serve the folder (GitHub Pages works). It can be added to a phone's home screen (PWA).
 
+<table>
+<tr>
+<td valign="top" width="480">
+
 Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth.h`, `Splash.h`):
 
 - **Start screen** and the **resting emblem** use the firmware's own images. At rest (measure mode, one minute with no
@@ -31,9 +35,14 @@ Meteor zone (trial): now and then the terrain sinks low and meteors stream from 
 
 `Fn+M` cycles measure -> flight -> keyboard; the last mode is remembered (flight at first).
 
-Who you may meet in flight mode (the field guide card, also shown beside the demo; click for the full size):
+</td>
+<td valign="top" width="360">
 
-<a href="assets/field-guide-en.webp"><img src="assets/field-guide-en.webp" alt="KeySpeaker flight mode field guide: three big monsters, six small targets, the city, the fighter and the cruiser" width="420"></a>
+<a href="assets/field-guide-en.webp"><img src="assets/field-guide-en.webp" alt="KeySpeaker flight mode field guide: three big monsters, six small targets, the city, the fighter and the cruiser" width="360"></a>
+
+</td>
+</tr>
+</table>
 
 ## Audio source
 
