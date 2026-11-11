@@ -59,8 +59,8 @@ html[data-lang="ja"] [lang="en"], html[data-lang="en"] [lang="ja"] { display: no
 /* Field-guide cards: beside the demo on wide screens, below it otherwise. */
 .side { display: none; }
 .gimg { display: block; width: 100%; max-width: 520px; height: auto; margin: 0 auto; border-radius: 6px; }
-@media (min-width: 1600px) {
-  body { display: grid; grid-template-columns: minmax(0, 1fr) 820px minmax(0, 1fr); column-gap: 24px; align-items: start; }
+@media (min-width: 1280px) {
+  body { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 820px) minmax(240px, 1fr); column-gap: 24px; align-items: start; }
   .side { display: block; padding: 14px 0 28px; }
   .crop { display: block; width: 100%; max-width: 520px; background-size: 100% auto; background-repeat: no-repeat; border-radius: 6px; }
   .crop.top { aspect-ratio: 832 / 1190; background-position: 0 0; margin-left: auto; }
