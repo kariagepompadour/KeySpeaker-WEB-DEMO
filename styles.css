@@ -62,7 +62,8 @@ html[data-lang="ja"] [lang="en"], html[data-lang="en"] [lang="ja"] { display: no
 @media (min-width: 1600px) {
   body { display: grid; grid-template-columns: minmax(0, 1fr) 820px minmax(0, 1fr); column-gap: 24px; align-items: start; }
   .side { display: block; padding: 14px 0 28px; }
-  .side img { display: block; width: 100%; max-width: 520px; height: auto; border-radius: 6px; }
-  .side-l img { margin-left: auto; }
+  .crop { display: block; width: 100%; max-width: 520px; background-size: 100% auto; background-repeat: no-repeat; border-radius: 6px; }
+  .crop.top { aspect-ratio: 832 / 1190; background-position: 0 0; margin-left: auto; }
+  .crop.bot { aspect-ratio: 832 / 810; background-position: 0 100%; }
   .guide-bottom { display: none; }
 }
