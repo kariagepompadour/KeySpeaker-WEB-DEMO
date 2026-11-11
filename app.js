@@ -146,7 +146,7 @@ const FV = (() => {
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && !s.bomber && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
+      if (musicOk && !s.cruiser && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
         // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
         // it only bluffs (the display, no reach at all).
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
@@ -499,7 +499,7 @@ const FV = (() => {
   const MZ_IN_S = 1.5, MZ_RUN_S = 17, MZ_OUT_S = 2, MZ_FIRST_MS = 90000, MZ_MS_MIN = 120000, MZ_MS_MAX = 240000, MZ_SEG = 7, MZ_WARP_PX_S = 260;
   const MZ_MAX = 40, MZ_DUST_MAX = 18, MZ_RATE_MIN = 3, MZ_RATE_MAX = 12, MZ_DUST_RATE = 14, MZ_GAP = 8;
   const MZ_SIZE = [{ r: 2, vMin: 170, vMax: 240, tail: 6 }, { r: 4, vMin: 220, vMax: 300, tail: 10 }, { r: 6, vMin: 280, vMax: 360, tail: 15 }];
-  const meteorNow = () => typeof location !== "undefined" && /meteor=now|bomber=now/.test(location.search);
+  const meteorNow = () => typeof location !== "undefined" && /meteor=now|bomber=now|cruiser=now/.test(location.search);
   const mzTop = () => TOP + 6, mzBottom = () => H - MZ_SEG * SEG_PITCH - SHIP_H - 6;
   const mzPath = (s, ms) => { const t = ms * 0.001 + s.mz.ph0, mid = (mzTop() + mzBottom()) / 2, a = (mzBottom() - mzTop()) / 2;
     return mid + a * (0.62 * Math.sin(t * 1.1) + 0.38 * Math.sin(t * 2.3 + 1)); };
@@ -524,7 +524,7 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.acc = 0; z.dustAcc = 0; z.ph0 = (nextRandom(s) % 628) / 100;
-        if (bmNow() || nextRandom(s) % 100 < BM_ZONE_PCT) s.bomber = { x: W + 2, hits: 0, nextDrop: now + 2500, puff: 0 };   // the bomber comes in with the zone
+        if (crNow() || nextRandom(s) % 100 < CR_ZONE_PCT) s.cruiser = { x: W + 2, hits: 0, nextFire: now + 2500, puff: 0 };   // the cruiser comes in with the zone
         k.nextMs = Math.max(k.nextMs, now + (MZ_IN_S + MZ_RUN_S + MZ_OUT_S) * 1000 + 8000);
       }
     }
@@ -534,7 +534,7 @@ const FV = (() => {
     else if (z.ph === 2 && z.t >= MZ_RUN_S) { z.ph = 3; z.t = 0; }
     else if (z.ph === 3) {
       z.u = Math.max(0, 1 - z.t / MZ_OUT_S);
-      if (z.t >= MZ_OUT_S && s.met.length === 0 && !s.bomber) {
+      if (z.t >= MZ_OUT_S && s.met.length === 0 && !s.cruiser) {
         z.ph = 0; z.u = 0; s.nextLightMs = Math.max(s.nextLightMs, now + 6000);
         z.nextMs = now + (meteorNow() ? 8000 : MZ_MS_MIN + nextRandom(s) % (MZ_MS_MAX - MZ_MS_MIN));
       }
@@ -553,7 +553,7 @@ const FV = (() => {
     }
     for (const m of s.met) {
       m.x -= m.v * dt; m.y += m.vy * dt;
-      if (s.bomber && m.size === 2 && bomberAt(s.bomber, m.x, m.y)) { m.dead = true; s.bomber.hits++; freeBurst(s, m.x, m.y, false); }   // a big meteor strikes the bomber: sparks, and the damage adds up
+      if (s.cruiser && m.size === 2 && cruiserAt(s.cruiser, m.x, m.y)) { m.dead = true; s.cruiser.hits++; freeBurst(s, m.x, m.y, false); }   // a big meteor strikes the cruiser: sparks, and the damage adds up
     }
     for (const d of s.dust) d.x -= d.v * dt;
     s.met = s.met.filter(m => !m.dead && m.x > -MZ_SIZE[m.size].tail * DOT - 8);
@@ -584,91 +584,109 @@ const FV = (() => {
     }
   }
 
-  /* ---- BOMBER (trial): a silver heavy bomber like a B-29 Superfortress, as long as the screen is wide (80 dots, 240 px). It belongs to the meteor zone: when
-     the zone begins (with the terrain sinking low and the stars streaming) it crosses the sky from the right to the left slowly, taking the whole zone to do
-     it, like a boss in the distance. It is behind the meteors and the terrain, drops bombs from its belly that crater the low terrain (a hit on the fighter only
-     lights the shield), and the big meteors that strike it set it smoking, then burning, but it flies on. ?bomber=now: a meteor zone with the bomber, soon
-     and then every 8 s. ---- */
-  const BM_W = 80, BM_H = 18, BM_Y = 14, BM_SPEED = (W + 2 + BM_W * 3 + 4) / (1.5 + 17 + 2);   // dots, dots, px from the top, px/s: it takes the whole zone (about 20 s) to cross
-  const BM_ZONE_PCT = 60;                                                  // 6 meteor zones in 10 bring the bomber (always with ?bomber=now)
-  const bmNow = () => typeof location !== "undefined" && /bomber=now/.test(location.search);
-  const BM_ENGINES = [{ x: 22, y: 5, near: false }, { x: 37, y: 4, near: false }, { x: 19, y: 14, near: true }, { x: 34, y: 14, near: true }];   // propeller x, y (dots)
-  const BM_ART = (() => {
-    const g = Array.from({ length: BM_H }, () => Array(BM_W).fill("."));
-    const set = (x, y, c) => { if (x >= 0 && x < BM_W && y >= 0 && y < BM_H) g[y][x] = c; };
-    const yc = 10;
-    const rad = x => x < 9 ? 1.2 + 2.9 * Math.sqrt(x / 9) : x <= 50 ? 4.1 : Math.max(1, 4.1 - (x - 50) / 29 * 3.2);
-    const nacelle = (x0, y0, w, h) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) set(x, y, y === y0 ? "S" : y === y0 + h - 1 ? "D" : "M"); };
-    for (let x = 28; x <= 49; x++) { const y = 7 - Math.floor((x - 28) * 0.2); set(x, y, "D"); set(x, y + 1, "M"); }   // the far wing, raised toward the back
-    nacelle(23, 4, 8, 3); nacelle(38, 3, 8, 3);                                                                         // the two far engines
-    for (let x = 60; x < BM_W; x++) {                                                                                  // the tall tail fin
-      const top = x < 71 ? Math.round(yc - 4 - (x - 60) * (yc - 4 - 0) / 11) : 0;
-      for (let y = top; y <= yc - 2; y++) set(x, y, x === 60 || y === top ? "S" : "M");
+  /* ---- CRUISER (trial): a wedge-shaped capital ship, as long as the screen is wide (80 dots, 240 px): a very long, flat dagger of a hull with its
+     nose to the left, stepped terraces at the stern, a tall bridge with two globes, a row of small lights along the underside and three blue
+     engines at the back (an original design, after the user's two reference pictures). It belongs to the meteor zone: when the zone begins (the terrain sinks
+     low, the stars stream) it crosses the sky from the right to the left slowly, taking the whole zone to do it, like a boss in the distance. It is behind
+     the meteors and the terrain. It fires slow green bolts from its underside at the ground around the fighter (a hit on the fighter only lights its shield),
+     and the big meteors that strike it set it smoking, then burning, but it flies on. ?cruiser=now (or ?bomber=now): a meteor zone with the cruiser,
+     soon and then every 8 s. ---- */
+  const CR_W = 80, CR_H = 22, CR_Y = 12, CR_TRAIL = 34;                       // dots, dots, px from the top, px of engine trail behind it
+  const CR_SPEED = (W + 2 + CR_W * 3 + CR_TRAIL) / (1.5 + 17 + 2);          // px/s: it takes the whole zone (about 20 s) to cross
+  const CR_ZONE_PCT = 20;                                                    // a rare boss: about 1 meteor zone in 5 brings the cruiser, by lot (always with ?cruiser=now)
+  const crNow = () => typeof location !== "undefined" && /cruiser=now|bomber=now/.test(location.search);
+  const CR_ENGINES = [11, 14, 17];                                           // the rows of the three nozzles at the stern
+  const CR_GUNS = [[28, 17], [40, 18], [52, 18]];                            // where the bolts leave the underside (dots)
+  const CR_DAMAGE = [[56, 8], [36, 11], [20, 12]];                           // where it smokes, in the order the damage builds up (dots)
+  const CR_ART = (() => {
+    const g = Array.from({ length: CR_H }, () => Array(CR_W).fill("."));
+    const set = (x, y, c) => { if (x >= 0 && x < CR_W && y >= 0 && y < CR_H) g[y][x] = c; };
+    const top = x => 15 - 5 * Math.min(1, x / 52), bot = x => 15 + 5 * x / (CR_W - 1);     // the long wedge: the nose is at mid height, the top rises and the underside falls toward the stern
+    for (let x = 0; x < CR_W; x++) {
+      const t = Math.round(top(x)), b = Math.round(bot(x)), th = Math.max(1, b - t);
+      for (let y = t; y <= b; y++) {
+        const u = (y - t) / th;
+        let c = u < 0.6 ? "S" : "D";
+        if (y === t) c = "H";                                                            // a bright edge along the top
+        else if (c === "S" && x % 8 === 3 && x > 3) c = "M";                              // panel seams
+        else if (c === "S" && Math.abs(u - 0.3) < 0.08 && x % 3 !== 0) c = "M";            // a trench of dashes along the length
+        else if (c === "D" && y === b - 1 && x % 3 === 1 && x > 5) c = "W";               // small lights along the underside
+        set(x, y, c);
+      }
     }
-    for (let x = 0; x < BM_W; x++) {                                                                                  // the fuselage: a long cigar, lit from above
-      const r = rad(x);
-      for (let y = Math.round(yc - r); y <= Math.round(yc + r); y++) set(x, y, y < yc - r * 0.35 ? "S" : y > yc + r * 0.45 ? "D" : "M");
-    }
-    for (let x = 0; x < 4; x++) for (let y = yc - 1; y <= yc + 1; y++) if (g[y][x] !== ".") set(x, y, "G");           // the glazed nose
-    for (let x = 4; x <= 10; x++) for (let y = yc - 3; y <= yc - 1; y++) if (g[y][x] !== ".") set(x, y, "G");           // the cockpit windows
-    for (let x = 14; x <= 15; x++) set(x, yc - 5, "G");                                                                 // a gun blister on top
-    for (let x = 26; x <= 28; x++) set(x, yc - 5, "M");
-    for (let x = 24; x <= 50; x++) { set(x, yc + 3, "M"); set(x, yc + 4, "D"); }                                       // the near wing seen from below, a thin band
-    nacelle(20, 13, 9, 4); nacelle(35, 13, 9, 4);                                                                       // the two near engines
-    for (let x = 40; x <= 54; x++) set(x, yc + 3, "K");                                                                 // the bomb bay seam
-    for (const [x, y, c] of [[46, yc - 1, "T"], [47, yc - 1, "T"], [48, yc - 1, "T"], [46, yc, "T"], [47, yc, "B"], [48, yc, "T"], [46, yc + 1, "T"], [47, yc + 1, "T"], [48, yc + 1, "T"]]) set(x, y, c);   // the white star roundel, blue in the middle
-    set(79, yc, "G");                                                                                                   // the tail gun
+    const block = (x0, x1, y0, c, edge) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= Math.round(bot(x)); y++) set(x, y, y === y0 ? edge : c); };
+    block(52, 79, 8, "S", "H"); block(58, 79, 6, "S", "H"); block(64, 78, 5, "S", "H");  // the stepped terraces at the stern
+    for (const [x0, y0] of [[52, 8], [58, 6], [64, 5]]) for (let y = y0 + 1; y <= y0 + 3; y++) set(x0, y, "D");   // the shadow at the foot of each step
+    for (let x = 53; x < CR_W; x++) for (let y = 9; y <= Math.round(bot(x)); y++) if (g[y][x] === "S" && (x * 3 + y * 5) % 7 === 0) set(x, y, "M");   // panelling on the stern, so it is not one flat block
+    for (const [x, y] of [[57, 9], [61, 7], [67, 6], [71, 6], [74, 6]]) { set(x, y, "K"); set(x + 1, y, "K"); }    // dark gun mounts on the steps
+    for (let x = 66; x <= 73; x++) { set(x, 3, "L"); set(x, 4, "L"); }                  // the bridge's neck
+    for (let x = 62; x <= 77; x++) { set(x, 1, "L"); set(x, 2, x % 2 ? "W" : "L"); }  // the wide bridge deck, its windows lit
+    for (const x of [63, 76]) for (const y of [0, 1]) { set(x, y, "G"); set(x + 1, y, "G"); }   // the two globes on top
+    for (let x = 66; x <= 67; x++) for (let y = 20; y <= 21; y++) set(x, y, "G");       // a small dome under the hull
+    for (const ey of CR_ENGINES) for (let x = 77; x <= 79; x++) for (let dy = -1; dy <= 1; dy++) set(x, ey + dy, "E");    // the engines
     return g;
   })();
-  const BMC = { S: rgb(222, 230, 240), M: rgb(172, 184, 202), D: rgb(104, 116, 134), G: rgb(120, 186, 222), K: rgb(52, 60, 74), T: rgb(250, 250, 255), B: rgb(40, 80, 190) };
-  const bomberAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - BM_Y) / DOT); return r >= 0 && r < BM_H && c >= 0 && c < BM_W && BM_ART[r][c] !== "."; };
-  function updateBomber(s, now, dt, sx, sy) {
-    const b = s.bomber;
+  const CRC = { S: rgb(206, 212, 222), H: rgb(242, 246, 252), M: rgb(150, 158, 174), D: rgb(94, 102, 120), K: rgb(50, 56, 72), L: rgb(182, 190, 204), W: rgb(255, 222, 150), G: rgb(246, 249, 255) };
+  const cruiserAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - CR_Y) / DOT); return r >= 0 && r < CR_H && c >= 0 && c < CR_W && CR_ART[r][c] !== "."; };
+  function updateCruiser(s, now, dt, sx, sy) {
+    const b = s.cruiser;
     if (b) {
-      b.x -= BM_SPEED * dt;
-      const bay = Math.round(b.x) + 47 * DOT;                                    // under the belly, at the bomb bay
-      if (now >= b.nextDrop && bay > 14 && bay < W - 14) {
-        b.nextDrop = now + 1000 + nextRandom(s) % 900;
-        if (s.bb.length < 8) s.bb.push({ x: bay, y: BM_Y + 14 * DOT, vx: -BM_SPEED, vy: 0 });
+      b.x -= CR_SPEED * dt;
+      if (now >= b.nextFire) {                                                   // a slow green bolt from the underside at the ground around the fighter
+        b.nextFire = now + 900 + nextRandom(s) % 900;
+        const gun = CR_GUNS[nextRandom(s) % CR_GUNS.length], gx = Math.round(b.x) + gun[0] * DOT, gy = CR_Y + gun[1] * DOT;
+        if (gx > 10 && gx < W - 6 && s.bb.length < 8) {
+          const tx = sx + SHIP_W / 2 + (nextRandom(s) % 121) - 60, ty = H - GROUND - 8 - nextRandom(s) % 16, d = Math.hypot(tx - gx, ty - gy) || 1;
+          s.bb.push({ x: gx, y: gy, vx: (tx - gx) / d * 150, vy: Math.max(50, (ty - gy) / d * 150) });
+        }
       }
-      b.puff -= dt;                                                              // smoke from the engines that have been hit: more hits, more engines
+      b.puff -= dt;                                                              // smoke from the places that have been hit: more hits, more places, the last one burns
       if (b.puff <= 0 && b.hits >= 2) {
         b.puff = 0.1;
         const n = b.hits >= 6 ? 3 : b.hits >= 4 ? 2 : 1;
-        for (let i = 0; i < n; i++) { const e = BM_ENGINES[[2, 0, 3][i]]; s.smoke.push({ x: Math.round(b.x) + (e.x + 6) * DOT, y: BM_Y + e.y * DOT, age: 0, fire: i === 2 && b.hits >= 6 }); }
+        for (let i = 0; i < n; i++) { const d = CR_DAMAGE[i]; s.smoke.push({ x: Math.round(b.x) + d[0] * DOT, y: CR_Y + d[1] * DOT, age: 0, fire: i === 2 }); }
       }
-      if (b.x < -BM_W * DOT - 4) s.bomber = null;
+      if (b.x < -CR_W * DOT - CR_TRAIL - 4) s.cruiser = null;
     }
     const off = scrollOffset(s, now);
-    for (const q of s.bb) {                                                      // the bombs: they keep the bomber's speed and fall in an arc
-      q.x += q.vx * dt; q.y += q.vy * dt + 0.5 * BOMB_G * dt * dt; q.vy += BOMB_G * dt;
+    for (const q of s.bb) {                                                      // the bolts fly straight and are not swept away with the rest of the world
+      q.x += q.vx * dt; q.y += q.vy * dt;
       const bx = Math.trunc(q.x), ground = H - heightAt(s, bx, off);
-      if (q.x > sx - DOT && q.x < sx + SHIP_W && q.y + 2 * DOT > sy && q.y < sy + SHIP_H) { q.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, q.y, false); }   // on the fighter: the shield takes it
-      else if (q.y + 2 * DOT - 1 >= ground) { q.dead = true; const i = colAt(bx + 1, off); carve(s, i, CRATER_SEG + 1); carve(s, i - 1, 2); carve(s, i + 1, 2); freeBurst(s, bx, ground - 1, false); }
-      else if (bx < -DOT) q.dead = true;
+      if (q.x > sx - DOT && q.x < sx + SHIP_W && q.y + DOT > sy && q.y < sy + SHIP_H) { q.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, q.y, false); }   // on the fighter: the shield takes it
+      else if (q.y + DOT >= ground) { q.dead = true; carve(s, colAt(bx + 1, off), 2); freeBurst(s, bx, ground - 1, false); }
+      else if (bx < -DOT || bx > W + DOT) q.dead = true;
     }
     s.bb = s.bb.filter(q => !q.dead);
     for (const p of s.smoke) { p.age += dt; p.y -= 9 * dt; }
     s.smoke = s.smoke.filter(p => p.age < 1.3);
   }
-  function renderBomber(s, now) {
-    const b = s.bomber; if (!b) return;
-    const bx = Math.round(b.x), flick = Math.floor(now / 55) & 1;
-    for (let r = 0; r < BM_H; r++) for (let c = 0; c < BM_W; c++) {
+  function renderCruiser(s, now) {
+    const b = s.cruiser; if (!b) return;
+    const bx = Math.round(b.x), fr = Math.floor(now / 70);
+    for (let r = 0; r < CR_H; r++) for (let c = 0; c < CR_W; c++) {
       const x = bx + c * DOT; if (x + DOT <= 0 || x >= W) continue;
-      const ch = BM_ART[r][c]; if (ch !== ".") dot(x, BM_Y + r * DOT, BMC[ch]);
+      const ch = CR_ART[r][c]; if (ch === ".") continue;
+      dot(x, CR_Y + r * DOT, ch === "E" ? ((fr + r) & 1 ? rgb(120, 176, 255) : rgb(180, 220, 255)) : CRC[ch]);
     }
-    for (const e of BM_ENGINES) {                                                // the propellers: a flickering blur
-      const x = bx + e.x * DOT; if (x + DOT <= 0 || x >= W) continue;
-      const h = flick ? 2 : 1;
-      for (let dy = -h; dy <= h; dy++) dot(x, BM_Y + (e.y + dy) * DOT, flick ? rgb(196, 206, 222) : rgb(140, 152, 170));
+    for (const ey of CR_ENGINES) {                                               // the engines' exhaust: a flickering streak of blue behind each
+      const n = 5 + ((Math.imul(fr, 2654435761) >>> 0) + ey * 7) % 5;
+      for (let k = 0; k < n; k++) {
+        const x = bx + (CR_W + k) * DOT; if (x + DOT <= 0 || x >= W) continue;
+        const f = 1 - k / 10; dot(x, CR_Y + ey * DOT, rgb(Math.round(40 + 110 * f), Math.round(80 + 120 * f), Math.round(150 + 105 * f)));
+      }
     }
-    for (const p of s.smoke) {                                                   // smoke from the hit engines, left behind; the last engine burns
+    for (const p of s.smoke) {                                                   // smoke from the hit places, left behind; the last one burns
       const f = Math.max(0, 1 - p.age / 1.3), v = Math.round(40 + 110 * f);
       dot(p.x + Math.round(p.age * 6), Math.round(p.y), p.fire && p.age < 0.5 ? ((Math.floor(now / 70) & 1) ? rgb(255, 150, 40) : rgb(255, 80, 20)) : rgb(v, v, v + 4));
     }
   }
-  function renderBomberBombs(s) { for (const q of s.bb) { dot(Math.trunc(q.x) - 1, Math.trunc(q.y), rgb(70, 74, 86)); dot(Math.trunc(q.x) - 1, Math.trunc(q.y) + DOT, rgb(230, 234, 242)); } }
+  function renderCruiserBolts(s) {
+    for (const q of s.bb) {
+      const l = Math.hypot(q.vx, q.vy) || 1, ux = q.vx / l, uy = q.vy / l;
+      for (let i = 2; i >= 1; i--) fillRect(Math.round(q.x - ux * i * 4), Math.round(q.y - uy * i * 4), 2, 2, rgb(40, 180 - i * 30, 70));   // a short tail
+      dot(Math.trunc(q.x) - 1, Math.trunc(q.y) - 1, rgb(190, 255, 200));
+    }
+  }
 
   /* ---- CITY (trial): now and then three buildings of different heights, built together, flow by with the terrain (they do not react to
      the sound), and small people wait on their roofs, waving for help. They are the runner of SOUND TERRARIUM (a 10 x 11 px white figure
@@ -840,7 +858,7 @@ const FV = (() => {
   const newState = () => ({
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
-    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, bomber: null, bb: [], smoke: [],
+    nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, cruiser: null, bb: [], smoke: [],
     mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
@@ -1072,7 +1090,7 @@ const FV = (() => {
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
     updateCity(s, now, dt, sx, sy);
-    updateBomber(s, now, dt, sx, sy);
+    updateCruiser(s, now, dt, sx, sy);
 
     for (const m of s.m) {
       if (!m.on) continue;
@@ -1239,7 +1257,7 @@ const FV = (() => {
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
       for (let t = Math.round(s.mz.u * (st.near ? 10 : 4)); t > 0; t--) px(x + 1 + t, y, c);
     }
-    renderBomber(s, now);                                  // the bomber: in the sky, behind everything but the stars
+    renderCruiser(s, now);                                  // the cruiser: in the sky, behind everything but the stars
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
     for (let i = 0; i < COLS; i++) {
@@ -1317,7 +1335,7 @@ const FV = (() => {
       }
     }
     for (const b of s.b) if (b.on) dot(Math.trunc(b.x), Math.trunc(b.y), C.white);
-    renderBomberBombs(s);
+    renderCruiserBolts(s);
 
   }
 
