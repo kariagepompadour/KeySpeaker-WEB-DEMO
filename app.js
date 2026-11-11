@@ -591,7 +591,7 @@ const FV = (() => {
      the meteors and the terrain. It fires slow green bolts from its underside at the ground around the fighter (a hit on the fighter only lights its shield),
      and the big meteors that strike it set it smoking, then burning, but it flies on. ?cruiser=now (or ?bomber=now): a meteor zone with the cruiser,
      soon and then every 8 s. ---- */
-  const CR_W = 80, CR_H = 27, CR_Y = 8, CR_TRAIL = 34;                        // dots, dots, px from the top, px of engine trail behind it
+  const CR_W = 80, CR_H = 25, CR_Y = 8, CR_TRAIL = 34;                        // dots, dots, px from the top, px of engine trail behind it
   const CR_SPEED = (W + 2 + CR_W * 3 + CR_TRAIL) / (1.5 + 17 + 2);          // px/s: it takes the whole zone (about 20 s) to cross
   const CR_ZONE_PCT = 20;                                                    // a rare boss: about 1 meteor zone in 5 brings the cruiser, by lot (always with ?cruiser=now)
   const crNow = () => typeof location !== "undefined" && /cruiser=now|bomber=now/.test(location.search);
@@ -638,9 +638,6 @@ const FV = (() => {
     for (let x = 61; x <= 78; x++) { set(x, 2, x < 63 || x > 76 ? "H" : "R"); set(x, 3, x % 2 ? "W" : "L"); }   // the wide bridge deck: a maroon cap, a row of lit windows
     for (let x = 61; x <= 78; x++) if (g[4][x] === ".") set(x, 4, "D");                                  // the deck's shadow
     for (const x of [62, 77]) { set(x, 0, "G"); set(x + 1, 0, "S"); set(x, 1, "L"); set(x + 1, 1, "M"); }   // the two globes on top, lit from the upper left
-    const dome = (x0, y0) => { for (let i = 0; i < 4; i++) set(x0 + i, y0, i === 0 ? "L" : i === 3 ? "M" : "S");   // two half-spheres hanging under the hull, lit from the upper left
-      for (let i = 0; i < 4; i++) set(x0 + i, y0 + 1, i === 0 ? "L" : i === 1 ? "G" : i === 2 ? "L" : "D"); for (let i = 1; i <= 2; i++) set(x0 + i, y0 + 2, i === 1 ? "M" : "D"); };
-    dome(44, 22); dome(58, 23);   // each hangs from the underside (rows 21 and 22 there)
     for (const ey of CR_ENGINES) { for (let dy = -1; dy <= 1; dy++) { set(76, ey + dy, "K"); for (let x = 77; x <= 79; x++) set(x, ey + dy, "E"); } }   // the engines, in a dark frame
     return g;
   })();
