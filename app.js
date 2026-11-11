@@ -524,7 +524,7 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.acc = 0; z.dustAcc = 0; z.ph0 = (nextRandom(s) % 628) / 100;
-        if (crNow() || nextRandom(s) % 100 < CR_ZONE_PCT) s.cruiser = { x: W + 2, hits: 0, nextFire: now + 2500, puff: 0 };   // the cruiser comes in with the zone
+        if (crNow() || nextRandom(s) % 100 < CR_ZONE_PCT) s.cruiser = { x: W + 2, hits: 0, nextFire: now + 2500, puff: 0, volley: 0, volleyAt: 0 };   // the cruiser comes in with the zone
         k.nextMs = Math.max(k.nextMs, now + (MZ_IN_S + MZ_RUN_S + MZ_OUT_S) * 1000 + 8000);
       }
     }
@@ -596,7 +596,8 @@ const FV = (() => {
   const CR_ZONE_PCT = 20;                                                    // a rare boss: about 1 meteor zone in 5 brings the cruiser, by lot (always with ?cruiser=now)
   const crNow = () => typeof location !== "undefined" && /cruiser=now|bomber=now/.test(location.search);
   const CR_ENGINES = [16, 19, 22];                                           // the rows of the three nozzles at the stern
-  const CR_GUNS = [[28, 21], [40, 22], [52, 23]];                            // where the bolts leave the underside (dots)
+  const CR_GUNS = [[28, 21], [40, 22], [52, 23]];                            // where the bolts leave when the fighter is below it: the underside (dots)
+  const CR_TOPGUNS = [[32, 12], [42, 11], [48, 11], [58, 8], [60, 8]];       // and when it is above it: the gun mounts on top
   const CR_DAMAGE = [[56, 12], [36, 15], [20, 16]];                          // where it smokes, in the order the damage builds up (dots)
   // Depth. The hull is a thick wedge slab seen a little from above: a bright top plane, and under it a tall side wall that is clearly another surface (a mid tone
   // falling to a dark one, with ribs, grooves and small cyan lights like machinery), then a thin lit edge and a very dark underside. On the stern a slab
@@ -645,16 +646,28 @@ const FV = (() => {
   })();
   const CRC = { S: rgb(206, 212, 222), H: rgb(242, 246, 252), M: rgb(138, 146, 162), D: rgb(80, 88, 106), K: rgb(34, 38, 52), L: rgb(184, 192, 206), W: rgb(255, 222, 150), G: rgb(246, 249, 255), C: rgb(110, 226, 226), R: rgb(150, 50, 62) };
   const cruiserAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - CR_Y) / DOT); return r >= 0 && r < CR_H && c >= 0 && c < CR_W && CR_ART[r][c] !== "."; };
+  const cruiserEvade = (s, sx, sy) => {   // the fighter slips up or down away from a bolt that is about to reach it
+    for (const q of s.bb) {
+      if (Math.abs(q.vx) < 1) continue;
+      const t = (sx + SHIP_W / 2 - q.x) / q.vx;   // when the bolt gets to the fighter's x
+      if (t < 0.05 || t > 0.7) continue;
+      const y = q.y + q.vy * t;
+      if (Math.abs(y - (sy + SHIP_H / 2)) < SHIP_H / 2 + 6) return y > sy + SHIP_H / 2 ? -K_EVADE_PX : K_EVADE_PX;
+    }
+    return 0;
+  };
   function updateCruiser(s, now, dt, sx, sy) {
     const b = s.cruiser;
     if (b) {
       b.x -= CR_SPEED * dt;
-      if (now >= b.nextFire) {                                                   // a slow green bolt from the underside at the ground around the fighter
-        b.nextFire = now + 900 + nextRandom(s) % 900;
-        const gun = CR_GUNS[nextRandom(s) % CR_GUNS.length], gx = Math.round(b.x) + gun[0] * DOT, gy = CR_Y + gun[1] * DOT;
-        if (gx > 10 && gx < W - 6 && s.bb.length < 8) {
-          const tx = sx + SHIP_W / 2 + (nextRandom(s) % 121) - 60, ty = H - GROUND - 8 - nextRandom(s) % 16, d = Math.hypot(tx - gx, ty - gy) || 1;
-          s.bb.push({ x: gx, y: gy, vx: (tx - gx) / d * 150, vy: Math.max(50, (ty - gy) / d * 150) });
+      if (now >= b.nextFire) { b.nextFire = now + 1100 + nextRandom(s) % 900; b.volley = 2 + nextRandom(s) % 2; b.volleyAt = now; }   // a volley of two or three bolts, a moment apart
+      if (b.volley > 0 && now >= b.volleyAt) {
+        b.volley--; b.volleyAt = now + 90;
+        const fcx = sx + SHIP_W / 2, fcy = sy + SHIP_H / 2, guns = fcy > CR_Y + 21 * DOT ? CR_GUNS : CR_TOPGUNS;   // the guns that face the fighter
+        const gun = guns[nextRandom(s) % guns.length], gx = Math.round(b.x) + gun[0] * DOT + 1, gy = CR_Y + gun[1] * DOT;
+        if (gx > 6 && gx < W - 4 && s.bb.length < 10) {
+          const tx = fcx + (nextRandom(s) % 21) - 10, ty = fcy + (nextRandom(s) % 17) - 8, d = Math.hypot(tx - gx, ty - gy) || 1;   // straight at the fighter, a little off
+          s.bb.push({ x: gx, y: gy, ox: gx, oy: gy, vx: (tx - gx) / d * 130, vy: (ty - gy) / d * 130, age: 0 });
         }
       }
       b.puff -= dt;                                                              // smoke from the places that have been hit: more hits, more places, the last one burns
@@ -667,11 +680,11 @@ const FV = (() => {
     }
     const off = scrollOffset(s, now);
     for (const q of s.bb) {                                                      // the bolts fly straight and are not swept away with the rest of the world
-      q.x += q.vx * dt; q.y += q.vy * dt;
+      q.x += q.vx * dt; q.y += q.vy * dt; q.age += dt;
       const bx = Math.trunc(q.x), ground = H - heightAt(s, bx, off);
-      if (q.x > sx - DOT && q.x < sx + SHIP_W && q.y + DOT > sy && q.y < sy + SHIP_H) { q.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, q.y, false); }   // on the fighter: the shield takes it
+      if (q.x > sx - DOT && q.x < sx + SHIP_W && q.y + DOT > sy && q.y < sy + SHIP_H) { q.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, q.y, false); freeBurst(s, bx - 6, q.y + 3, false); }   // on the fighter: the shield takes it, with a bigger flash
       else if (q.y + DOT >= ground) { q.dead = true; carve(s, colAt(bx + 1, off), 2); freeBurst(s, bx, ground - 1, false); }
-      else if (bx < -DOT || bx > W + DOT) q.dead = true;
+      else if (bx < -DOT || bx > W + DOT || q.y < -DOT) q.dead = true;
     }
     s.bb = s.bb.filter(q => !q.dead);
     for (const p of s.smoke) { p.age += dt; p.y -= 9 * dt; }
@@ -700,8 +713,9 @@ const FV = (() => {
   function renderCruiserBolts(s) {
     for (const q of s.bb) {
       const l = Math.hypot(q.vx, q.vy) || 1, ux = q.vx / l, uy = q.vy / l;
-      for (let i = 2; i >= 1; i--) fillRect(Math.round(q.x - ux * i * 4), Math.round(q.y - uy * i * 4), 2, 2, rgb(40, 180 - i * 30, 70));   // a short tail
-      dot(Math.trunc(q.x) - 1, Math.trunc(q.y) - 1, rgb(190, 255, 200));
+      for (let i = 7; i >= 1; i--) { const f = 1 - i / 8, w = i < 3 ? 3 : 2; fillRect(Math.round(q.x - ux * i * 3.5) - 1, Math.round(q.y - uy * i * 3.5) - 1, w, w, rgb(Math.round(30 + 110 * f), Math.round(120 + 135 * f), Math.round(50 + 130 * f))); }   // a long tail fading into green
+      dot(Math.trunc(q.x) - 1, Math.trunc(q.y) - 1, rgb(230, 255, 235));
+      if (q.age < 0.12) for (const [dx, dy] of [[0, 0], [-DOT, 0], [DOT, 0], [0, -DOT], [0, DOT]]) dot(Math.round(q.ox) - 1 + dx, Math.round(q.oy) - 1 + dy, dx || dy ? rgb(120, 255, 150) : rgb(255, 255, 255));   // the muzzle flash
     }
   }
 
@@ -1103,7 +1117,7 @@ const FV = (() => {
     if (s.mz.u > 0) { target += (mzPath(s, now) - target) * s.mz.u; ease = 0.05 + (ease - 0.05) * (1 - s.mz.u); }
     s.shipY += (target - s.shipY) * (1 - Math.exp(-dt / ease));
     updateLights(s, now, dt);
-    const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2);
+    const evadeTgt = updateKong(s, now, dt, sx + SHIP_W / 2, s.shipY + bobY(now) + SHIP_H / 2) || cruiserEvade(s, sx, s.shipY + bobY(now));
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
     updateCity(s, now, dt, sx, sy);
