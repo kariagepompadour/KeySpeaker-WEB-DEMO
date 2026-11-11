@@ -55,3 +55,14 @@ html[data-lang="ja"] [lang="en"], html[data-lang="en"] [lang="ja"] { display: no
 .quick .btn { border-radius: 999px; } .kk { color: var(--amber); font: 700 12px/1 ui-monospace, Menlo, monospace; margin-right: 4px; }
 .quick .btn.on, .quick .btn:active { background: var(--amber); color: #201400; } .quick .btn.on .kk, .quick .btn:active .kk { color: #201400; }
 .fnnote { margin: -8px 0 12px; font-size: 13.5px; }
+
+/* Field-guide card: beside the demo (right) on wide screens, below it otherwise. */
+.side { display: none; }
+.gimg { display: block; width: 100%; max-width: 520px; margin: 0 auto; }
+.gimg img { display: block; width: 100%; height: auto; border-radius: 6px; }
+@media (min-width: 1200px) {
+  body { display: grid; grid-template-columns: minmax(0, 820px) minmax(300px, 520px); column-gap: 24px; justify-content: center; align-items: start; }
+  .side { display: block; padding: 14px 0 28px; }
+  .side .gimg { margin: 0; }
+  .guide-bottom { display: none; }
+}
