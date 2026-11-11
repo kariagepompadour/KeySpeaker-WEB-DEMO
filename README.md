@@ -31,6 +31,10 @@ Meteor zone (trial): now and then the terrain sinks low and meteors stream from 
 
 `Fn+M` cycles measure -> flight -> keyboard; the last mode is remembered (flight at first).
 
+Who you may meet in flight mode (the field guide card, also shown beside the demo; click for the full size):
+
+<a href="assets/field-guide-en.webp"><img src="assets/field-guide-en.webp" alt="KeySpeaker flight mode field guide: three big monsters, six small targets, the city, the fighter and the cruiser" width="420"></a>
+
 ## Audio source
 
 There are two live sources, plus a test sound. Only one runs at a time: choosing one stops the others.
