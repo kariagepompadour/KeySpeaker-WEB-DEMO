@@ -591,42 +591,59 @@ const FV = (() => {
      the meteors and the terrain. It fires slow green bolts from its underside at the ground around the fighter (a hit on the fighter only lights its shield),
      and the big meteors that strike it set it smoking, then burning, but it flies on. ?cruiser=now (or ?bomber=now): a meteor zone with the cruiser,
      soon and then every 8 s. ---- */
-  const CR_W = 80, CR_H = 22, CR_Y = 12, CR_TRAIL = 34;                       // dots, dots, px from the top, px of engine trail behind it
+  const CR_W = 80, CR_H = 27, CR_Y = 8, CR_TRAIL = 34;                        // dots, dots, px from the top, px of engine trail behind it
   const CR_SPEED = (W + 2 + CR_W * 3 + CR_TRAIL) / (1.5 + 17 + 2);          // px/s: it takes the whole zone (about 20 s) to cross
   const CR_ZONE_PCT = 20;                                                    // a rare boss: about 1 meteor zone in 5 brings the cruiser, by lot (always with ?cruiser=now)
   const crNow = () => typeof location !== "undefined" && /cruiser=now|bomber=now/.test(location.search);
-  const CR_ENGINES = [11, 14, 17];                                           // the rows of the three nozzles at the stern
-  const CR_GUNS = [[28, 17], [40, 18], [52, 18]];                            // where the bolts leave the underside (dots)
-  const CR_DAMAGE = [[56, 8], [36, 11], [20, 12]];                           // where it smokes, in the order the damage builds up (dots)
+  const CR_ENGINES = [16, 19, 22];                                           // the rows of the three nozzles at the stern
+  const CR_GUNS = [[28, 21], [40, 22], [52, 23]];                            // where the bolts leave the underside (dots)
+  const CR_DAMAGE = [[56, 12], [36, 15], [20, 16]];                          // where it smokes, in the order the damage builds up (dots)
+  // Depth. The hull is a thick wedge slab seen a little from above: a bright top plane, and under it a tall side wall that is clearly another surface (a mid tone
+  // falling to a dark one, with ribs, grooves and small cyan lights like machinery), then a thin lit edge and a very dark underside. On the stern a slab
+  // overhangs it, with a tapered bridge tower rising from it: its left face is lit and its right face in shade.
   const CR_ART = (() => {
     const g = Array.from({ length: CR_H }, () => Array(CR_W).fill("."));
     const set = (x, y, c) => { if (x >= 0 && x < CR_W && y >= 0 && y < CR_H) g[y][x] = c; };
-    const top = x => 15 - 5 * Math.min(1, x / 52), bot = x => 15 + 5 * x / (CR_W - 1);     // the long wedge: the nose is at mid height, the top rises and the underside falls toward the stern
+    const top = x => 17 - 4 * Math.min(1, x / 52), bot = x => 17 + 7 * x / (CR_W - 1);     // the nose is at mid height, the top rises a little and the underside falls a lot toward the stern
     for (let x = 0; x < CR_W; x++) {
-      const t = Math.round(top(x)), b = Math.round(bot(x)), th = Math.max(1, b - t);
+      const t = Math.round(top(x)), b = Math.round(bot(x));
       for (let y = t; y <= b; y++) {
-        const u = (y - t) / th;
-        let c = u < 0.6 ? "S" : "D";
-        if (y === t) c = "H";                                                            // a bright edge along the top
-        else if (c === "S" && x % 8 === 3 && x > 3) c = "M";                              // panel seams
-        else if (c === "S" && Math.abs(u - 0.3) < 0.08 && x % 3 !== 0) c = "M";            // a trench of dashes along the length
-        else if (c === "D" && y === b - 1 && x % 3 === 1 && x > 5) c = "W";               // small lights along the underside
+        const thick = b - t >= 6;
+        let c;
+        if (y === t) c = "H";                                                                          // the bright edge along the top
+        else if (y <= t + 2) c = (x % 8 === 3 && x > 3 && y === t + 1) ? "M" : "S";                    // the lit top plane, with panel seams
+        else if (!thick) c = y === b ? "S" : "M";                                                      // toward the nose the hull is thin: no wall to show
+        else if (y === b) c = "K";                                                                     // the dark underside
+        else if (y === b - 1) c = x % 6 === 2 && x > 4 ? "W" : "K";                                    // small lights along it
+        else if (y === b - 2) c = "S";                                                                 // the lit lower edge of the wall
+        else {                                                                                         // the side wall: mid tone falling to dark, with machinery
+          const q = (y - (t + 3)) / Math.max(1, b - 2 - (t + 3));
+          c = q < 0.45 ? "M" : "D";
+          if (x % 4 === 0 && x > 3) c = c === "M" ? "D" : "K";                                         // vertical ribs
+          else if (y === t + 4 && x % 2 === 0) c = "K";                                                // a groove under the plane
+          else if ((x * 7 + y * 3) % 13 === 0 && x > 6) c = "C";                                       // a cyan light here and there
+        }
         set(x, y, c);
       }
     }
-    const block = (x0, x1, y0, c, edge) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= Math.round(bot(x)); y++) set(x, y, y === y0 ? edge : c); };
-    block(52, 79, 8, "S", "H"); block(58, 79, 6, "S", "H"); block(64, 78, 5, "S", "H");  // the stepped terraces at the stern
-    for (const [x0, y0] of [[52, 8], [58, 6], [64, 5]]) for (let y = y0 + 1; y <= y0 + 3; y++) set(x0, y, "D");   // the shadow at the foot of each step
-    for (let x = 53; x < CR_W; x++) for (let y = 9; y <= Math.round(bot(x)); y++) if (g[y][x] === "S" && (x * 3 + y * 5) % 7 === 0) set(x, y, "M");   // panelling on the stern, so it is not one flat block
-    for (const [x, y] of [[57, 9], [61, 7], [67, 6], [71, 6], [74, 6]]) { set(x, y, "K"); set(x + 1, y, "K"); }    // dark gun mounts on the steps
-    for (let x = 66; x <= 73; x++) { set(x, 3, "L"); set(x, 4, "L"); }                  // the bridge's neck
-    for (let x = 62; x <= 77; x++) { set(x, 1, "L"); set(x, 2, x % 2 ? "W" : "L"); }  // the wide bridge deck, its windows lit
-    for (const x of [63, 76]) for (const y of [0, 1]) { set(x, y, "G"); set(x + 1, y, "G"); }   // the two globes on top
-    for (let x = 66; x <= 67; x++) for (let y = 20; y <= 21; y++) set(x, y, "G");       // a small dome under the hull
-    for (const ey of CR_ENGINES) for (let x = 77; x <= 79; x++) for (let dy = -1; dy <= 1; dy++) set(x, ey + dy, "E");    // the engines
+    for (let x = 56; x < CR_W; x++) { set(x, 10, "H"); set(x, 11, x >= 58 && x <= 77 ? "R" : "S"); set(x, 12, "D"); }   // the overhanging slab on the stern: a bright edge, a maroon stripe, a shadow beneath
+    for (let y = 10; y <= 12; y++) set(56, y, "D");
+    for (const [x, y] of [[58, 9], [60, 9], [42, 12], [48, 12], [32, 13]]) { set(x, y, "K"); set(x + 1, y, "K"); set(x, y - 1, "M"); }   // gun mounts: dark with a lit top
+    for (let r = 4; r <= 9; r++) {                                                                       // the bridge tower: narrow at the top, wide at the foot; left face lit, right face in shade
+      const w = 8 + (r - 4), x0 = Math.round(69.5 - w / 2), x1 = x0 + w - 1;
+      for (let x = x0; x <= x1; x++) set(x, r, x === x0 ? "S" : x < 70 ? "L" : x === x1 ? "K" : "D");
+      if (r === 5 || r === 7) { set(x0 + 2, r, "C"); set(x0 + 3, r, "C"); }                              // light strips on the lit face
+    }
+    for (let x = 61; x <= 78; x++) { set(x, 2, x < 63 || x > 76 ? "H" : "R"); set(x, 3, x % 2 ? "W" : "L"); }   // the wide bridge deck: a maroon cap, a row of lit windows
+    for (let x = 61; x <= 78; x++) if (g[4][x] === ".") set(x, 4, "D");                                  // the deck's shadow
+    for (const x of [62, 77]) { set(x, 0, "G"); set(x + 1, 0, "S"); set(x, 1, "L"); set(x + 1, 1, "M"); }   // the two globes on top, lit from the upper left
+    const dome = (x0, y0) => { for (let i = 0; i < 4; i++) set(x0 + i, y0, i === 0 ? "L" : i === 3 ? "M" : "S");   // two half-spheres hanging under the hull, lit from the upper left
+      for (let i = 0; i < 4; i++) set(x0 + i, y0 + 1, i === 0 ? "L" : i === 1 ? "G" : i === 2 ? "L" : "D"); for (let i = 1; i <= 2; i++) set(x0 + i, y0 + 2, i === 1 ? "M" : "D"); };
+    dome(44, 22); dome(58, 23);   // each hangs from the underside (rows 21 and 22 there)
+    for (const ey of CR_ENGINES) { for (let dy = -1; dy <= 1; dy++) { set(76, ey + dy, "K"); for (let x = 77; x <= 79; x++) set(x, ey + dy, "E"); } }   // the engines, in a dark frame
     return g;
   })();
-  const CRC = { S: rgb(206, 212, 222), H: rgb(242, 246, 252), M: rgb(150, 158, 174), D: rgb(94, 102, 120), K: rgb(50, 56, 72), L: rgb(182, 190, 204), W: rgb(255, 222, 150), G: rgb(246, 249, 255) };
+  const CRC = { S: rgb(206, 212, 222), H: rgb(242, 246, 252), M: rgb(138, 146, 162), D: rgb(80, 88, 106), K: rgb(34, 38, 52), L: rgb(184, 192, 206), W: rgb(255, 222, 150), G: rgb(246, 249, 255), C: rgb(110, 226, 226), R: rgb(150, 50, 62) };
   const cruiserAt = (b, x, y) => { const c = Math.floor((x - Math.round(b.x)) / DOT), r = Math.floor((y - CR_Y) / DOT); return r >= 0 && r < CR_H && c >= 0 && c < CR_W && CR_ART[r][c] !== "."; };
   function updateCruiser(s, now, dt, sx, sy) {
     const b = s.cruiser;
