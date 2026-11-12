@@ -1,10 +1,23 @@
 # KeySpeaker WEB DEMO
 
+<table>
+<tr>
+<td valign="top" width="480">
+
 [日本語版](README_JA.md) · The page itself is in English, with a Japanese switch at the top right.
 
 A browser demo of the Cardputer ADV KeySpeaker, drawn pixel for pixel on a 240 x 135 canvas in a Cardputer-style body,
 following the firmware's behavior as closely as a browser allows. Static HTML / CSS / JavaScript only: open `index.html`
 or serve the folder (GitHub Pages works). It can be added to a phone's home screen (PWA).
+
+</td>
+<td valign="top" width="360">
+
+<img src="assets/poster-en.webp" alt="KeySpeaker poster: a fighter flies over a terrain built from sound, with three monsters behind it. Browser demo." width="360">
+
+</td>
+</tr>
+</table>
 
 <table>
 <tr>

@@ -1,8 +1,21 @@
 # KeySpeaker WEB DEMO
 
+<table>
+<tr>
+<td valign="top" width="480">
+
 [English](README.md)(メイン)· ページ本体は英語が標準で、右上のボタンで日本語に切り替えられます。
 
 Cardputer ADV 版 KeySpeaker の実機デモです。240 x 135 のキャンバスに画面を実機どおりに描き、ブラウザでできる範囲で実機の動きを再現しています。HTML / CSS / JavaScript だけで動きます(`index.html` を開くか、フォルダを配信。GitHub Pages 可)。スマホのホーム画面にも追加できます(PWA)。
+
+</td>
+<td valign="top" width="360">
+
+<img src="assets/poster-ja.webp" alt="KeySpeakerのポスター：音で出来た地形の上を戦闘機が飛び、後ろに3体のモンスター。ブラウザデモ" width="360">
+
+</td>
+</tr>
+</table>
 
 <table>
 <tr>
