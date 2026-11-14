@@ -667,15 +667,26 @@ const FV = (() => {
     }
     return h;
   }
-  function renderMoon(s) {   // a big pale moon, rising with the zone
+  // The moon: SOUND TERRARIUM's moon face (the same face as its sun, 20 px across: brows, eyes, nose, lips and chin drawn in fine lines), full,
+  // rising a little and brightening with the zone.
+  function moonLine(cx, cy, x1, y1, x2, y2, c) {   // a 1 px line, as the canvas strokes in SOUND TERRARIUM draw it
+    const n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+    for (let i = 0; i <= n; i++) px(cx + Math.round(x1 + (x2 - x1) * i / n), cy + Math.round(y1 + (y2 - y1) * i / n), c);
+  }
+  const MOON_FACE = [[-6, -4, -4, -5], [-4, -5, -2, -4], [2, -4, 4, -5], [4, -5, 6, -4],   // brows
+    [-6, -2, -4, -3], [-4, -3, -2, -2], [2, -2, 4, -3], [4, -3, 6, -2],                     // eyes
+    [0, -1, -1, 2], [-1, 2, 0, 3], [0, 3, 2, 2],                                             // nose
+    [-2, 5, 0, 4], [0, 4, 2, 5], [-2, 6, 0, 7], [0, 7, 2, 6],                                // lips
+    [-1, 8, 1, 8]];                                                                          // chin
+  const MOON_DOTS = [[-4, -2], [4, -2], [0, 4]];                                             // the pupils and the middle of the lips
+  function renderMoon(s) {
     const u = s.dz.u; if (u <= 0) return;
-    const mx = 196, my = 30 - Math.round(8 * (1 - u)), r = 10;
-    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-      const d2 = dx * dx + dy * dy; if (d2 > r * r) continue;
-      const crater = (dx + 3) * (dx + 3) + (dy + 2) * (dy + 2) < 9 || (dx - 4) * (dx - 4) + (dy - 3) * (dy - 3) < 5 || (dx + 1) * (dx + 1) + (dy - 5) * (dy - 5) < 3;
-      const v = (crater ? 0.78 : 1) * (d2 > (r - 1) * (r - 1) ? 0.85 : 1) * u;
-      px(mx + dx, my + dy, rgb(Math.round(244 * v), Math.round(236 * v), Math.round(200 * v)));
-    }
+    const cx = 196, cy = 30 - Math.round(8 * (1 - u)), R = 10;
+    const face = mix(BLACK, rgb(247, 210, 74), u), ink = mix(BLACK, rgb(66, 65, 33), u);
+    for (let yy = -R; yy <= R; yy++) for (let xx = -R; xx <= R; xx++) if (xx * xx + yy * yy <= R * R) px(cx + xx, cy + yy, face);
+    for (let a = 0; a < 64; a++) px(cx + Math.round(R * Math.cos(a * Math.PI / 32)), cy + Math.round(R * Math.sin(a * Math.PI / 32)), ink);   // the rim
+    for (const [x1, y1, x2, y2] of MOON_FACE) moonLine(cx, cy, x1, y1, x2, y2, ink);
+    for (const [x, y] of MOON_DOTS) px(cx + x, cy + y, ink);
   }
   function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx and a person waving to the fighter
     const z = s.dz; if (!z.ph) return;
@@ -1509,11 +1520,11 @@ const FV = (() => {
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
-        let peak = s.scale >= 1 && !s.mz.u ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
+        let peak = s.scale >= 1 && !s.mz.u && !s.dz.u ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
         if (peak < h) peak = -1;
         for (let dx = 0; dx < BAR_W; dx++) {
           const x = x0 + dx;
-          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? s.eqCol[s.pattern - 1][j] : BLACK;
+          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], SAND[k], du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too
           if (peak >= 0) for (let k = peak; k < peak + SEG_H; k++) fb[(H - 1 - k) * W + x] = C.peak;
         }
       }
