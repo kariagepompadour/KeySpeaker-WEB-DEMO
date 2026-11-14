@@ -693,16 +693,27 @@ const FV = (() => {
   // pale disc with three crater patches in one darker tone, all inside the rim so the outline stays round. It rises a little and
   // brightens as the zone comes in.
   const MOON_R = 11;
-  const MOON_CRATERS = [[-4, -3, 3], [4, 3, 2.5], [3, -5, 1.5]];   // x, y, radius (px from the middle)
+  const MOON_CRATERS = [[-4, -3, 3], [4, 3, 2.5], [3, -5, 1.5], [-5, 5, 1.5]];   // x, y, radius (px from the middle)
+  // Four tones, light to dark, in flat pixel-art steps like the pyramids' faces. The light comes from up on the right, as on the pyramids:
+  // the moon is a ball, brightest up on the right and darkening toward the lower left; a crater is a hollow, its upper-right wall in
+  // shadow and its lower-left rim catching the light.
+  const MOON_TONES = [[252, 246, 218], [234, 222, 180], [200, 184, 140], [150, 134, 100]];
   function renderMoon(s) {
     const u = s.dz.u; if (u <= 0) return;
-    const cx = 192, cy = 30 - Math.round(8 * (1 - u));
-    const lit = mix(BLACK, rgb(250, 240, 200), u), dark = mix(BLACK, rgb(206, 192, 150), u);
-    for (let dy = -MOON_R; dy < MOON_R; dy++) for (let dx = -MOON_R; dx < MOON_R; dx++) {
+    const cx = 192, cy = 30 - Math.round(8 * (1 - u)), R = MOON_R;
+    const tone = MOON_TONES.map(([r, g, b]) => mix(BLACK, rgb(r, g, b), u));
+    const L = [0.55, -0.55, 0.63];   // toward the light: right, up, toward us
+    for (let dy = -R; dy < R; dy++) for (let dx = -R; dx < R; dx++) {
       const x = dx + 0.5, y = dy + 0.5;   // the pixel's middle: the disc is symmetric
-      if (x * x + y * y > MOON_R * MOON_R) continue;
-      const crater = MOON_CRATERS.some(([mx, my, mr]) => (x - mx) * (x - mx) + (y - my) * (y - my) <= mr * mr);
-      px(cx + dx, cy + dy, crater ? dark : lit);
+      if (x * x + y * y > R * R) continue;
+      const z = Math.sqrt(R * R - x * x - y * y), lum = (x * L[0] + y * L[1] + z * L[2]) / R;
+      let t = lum > 0.78 ? 0 : lum > 0.45 ? 1 : lum > 0.1 ? 2 : 3;   // the ball's shading
+      for (const [mx, my, mr] of MOON_CRATERS) {
+        const ox = x - mx, oy = y - my, d = Math.hypot(ox, oy);
+        if (d <= mr) t = Math.min(3, t + ((ox - oy) / Math.SQRT2 > mr * 0.25 ? 2 : 1));   // inside: darker, the upper-right wall darkest
+        else if (d <= mr + 1 && (ox - oy) / Math.SQRT2 < -mr * 0.4) t = Math.max(0, t - 1);   // the lower-left rim, lit
+      }
+      px(cx + dx, cy + dy, tone[t]);
     }
   }
   function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
@@ -760,8 +771,8 @@ const FV = (() => {
         for (let c = -r; c <= r; c++) {
           let col;
           if (r === 0) col = cap;                                   // the golden capstone
-          else if (c === -r) col = edge;                            // the moonlit edge
-          else if (c < 0) col = course ? lit2 : lit;                // the face toward the moon, in courses of stone
+          else if (c === r) col = edge;                             // the moonlit edge (the moon is up on the right)
+          else if (c > 0) col = course ? lit2 : lit;                // the face toward the moon, in courses of stone
           else if (c === 0) col = lit2;                             // the ridge
           else col = course ? shade2 : shade;                       // the face in shadow
           dot(cx + c * DOT, y, col);
