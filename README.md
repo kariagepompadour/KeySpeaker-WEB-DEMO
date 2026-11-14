@@ -46,6 +46,8 @@ Screens, ported from the firmware (`KeySpeaker_S0.ino`, `FlightViz.h`, `KeyEarth
 
 Meteor zone (trial): now and then the terrain sinks low and meteors stream from right to left while the fighter weaves through them. Add `?meteor=now` to the address to see one soon after start, then every 8 s.
 
+Desert zone (trial): rarely the terrain becomes sand dunes under a full moon, and pyramids, a sphinx and a small camel caravan flow by. Add `?desert=now` to the address to see one soon after start, then every 30 s.
+
 `Fn+M` cycles measure -> flight -> keyboard; the last mode is remembered (flight at first).
 
 </td>

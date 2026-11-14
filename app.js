@@ -448,7 +448,7 @@ const FV = (() => {
     if (!s.mz.ph && (s.prevDb > DB_SILENT || lightsNow()) && s.lights.length < MAX_LIGHTS && now - s.nextLightMs >= 0) {
       const d = Math.PI / 180;
       s.lights.push({ x: W + 24, base: ((nextRandom(s) % 21) - 10) * d, amp: (20 + nextRandom(s) % 22) * d, w: 0.45 + (nextRandom(s) % 40) / 100, ph: (nextRandom(s) % 628) / 100, a: 0 });
-      s.nextLightMs = now + LIGHT_MS_MIN + nextRandom(s) % (LIGHT_MS_MAX - LIGHT_MS_MIN);
+      s.nextLightMs = now + (s.dz.ph ? 2500 + nextRandom(s) % 4000 : LIGHT_MS_MIN + nextRandom(s) % (LIGHT_MS_MAX - LIGHT_MS_MIN));   // in the desert they come more often
     }
   }
   function addDot(x, y, r, g, b) {   // a 3 x 3 dot, its light added to what is behind it (the stars show through)
@@ -503,7 +503,8 @@ const FV = (() => {
   const mzTop = () => TOP + 6, mzBottom = () => H - MZ_SEG * SEG_PITCH - SHIP_H - 6;
   const mzPath = (s, ms) => { const t = ms * 0.001 + s.mz.ph0, mid = (mzTop() + mzBottom()) / 2, a = (mzBottom() - mzTop()) / 2;
     return mid + a * (0.62 * Math.sin(t * 1.1) + 0.38 * Math.sin(t * 2.3 + 1)); };
-  const mzHeight = (s, h) => s.mz.u > 0 ? Math.max(GROUND, Math.round(h * (1 - s.mz.u * (1 - MZ_SEG / NSEG)) / SEG_PITCH) * SEG_PITCH) : h;
+  const mzHeight = (s, h, eq) => { let u = s.mz.u, seg = MZ_SEG; if (s.dz.u > u) { u = s.dz.u; seg = eq ? DZ_SEG * NSEG / EQ_NSEG : DZ_SEG; }   // the meteor zone's low terrain, or the desert's dunes (the equalizer as tall as the dunes)
+    return u > 0 ? Math.max(GROUND, Math.round(h * (1 - u * (1 - seg / NSEG)) / SEG_PITCH) * SEG_PITCH) : h; };
   function spawnMeteor(s, now, sx, size) {
     if (s.met.length >= MZ_MAX) return;
     const z = MZ_SIZE[size], v = z.vMin + nextRandom(s) % (z.vMax - z.vMin), vy = v * (0.04 + (nextRandom(s) % 12) / 100), tail = z.tail * DOT;
@@ -522,7 +523,7 @@ const FV = (() => {
     const z = s.mz, k = s.k;
     if (z.nextMs === 0) z.nextMs = now + (meteorNow() ? 1500 : MZ_FIRST_MS);
     if (z.ph === 0) {
-      if (now - z.nextMs >= 0 && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
+      if (now - z.nextMs >= 0 && !s.dz.ph && k.ph === K_IDLE && (meteorNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.acc = 0; z.dustAcc = 0; z.ph0 = (nextRandom(s) % 628) / 100;
         if (crNow() || nextRandom(s) % 100 < CR_ZONE_PCT) s.cruiser = { x: W + 2, hits: 0, nextFire: now + 2500, puff: 0, volley: 0, volleyAt: 0, barrage: 0, bt: 0, fired: 0, nextMissile: 0 };   // the cruiser comes in with the zone
         k.nextMs = Math.max(k.nextMs, now + (MZ_IN_S + MZ_RUN_S + MZ_OUT_S) * 1000 + 8000);
@@ -581,6 +582,195 @@ const FV = (() => {
       if (m.size === 0) dot(gx, gy, core);
       else if (m.size === 1) { dot(gx, gy, core); dot(gx + DOT, gy, hot); dot(gx, gy - DOT, hot); dot(gx, gy + DOT, hot); }
       else for (const [ox, oy, c] of [[0, 0, core], [-1, 0, core], [1, 0, core], [0, -1, core], [0, 1, core], [-1, -1, hot], [1, -1, hot], [-1, 1, hot], [1, 1, hot], [-2, 0, hot], [2, 0, hot], [0, -2, hot], [0, 2, hot]]) dot(gx + ox * DOT, gy + oy * DOT, c);
+    }
+  }
+
+  /* ---- DESERT ZONE (trial): rarer than the meteor zone. The terrain sinks to low dunes the colour of sand, and pyramids and a
+     sphinx flow by with the ground under searchlights. No monsters, no city, no bombs. The dunes and the equalizer move with the music; the
+     pyramids stand still (a pyramid that grows and shrinks looked wrong), and a beat lights their golden capstones and the sphinx's eyes. ?desert=now: one soon after start, then every 30 s. ---- */
+  const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 7;
+  const desertNow = () => typeof location !== "undefined" && /desert=now/.test(location.search);
+  // the sphinx, lying with its paws to the left and its face turned toward us (L moonlit stone, S shade, D dark lines, E the two eyes,
+  // N the striped headdress falling on both sides of the face: gold and blue rows)
+  const SPHINX = [
+    ".....NNNNN.....................",
+    "....NNNNNNN....................",
+    "...NNNLLLNNN...................",
+    "...NNLLLLLNN...................",
+    "..NNLELLLELNN..................",
+    "..NNLLLDLLLNN..................",
+    "..NNLLDDDLLNN..................",
+    "..NNNLLLLLNNNSSSSSSSSSSS.......",
+    "..NNNLLLLLNNNLLLLLLLLLLLLSS....",
+    "...NNLLLLLNNLLLLLLLLLLLLLLLS...",
+    "....SLLLLLLLLLLLLLLLLLLLLLLLLS.",
+    "LLLLLLLLLLLLSLLLLLLLLLLLLLLLLS.",
+    "LDLDLLLLLLLLSLLLLLLLLLLLLLLLLLS"];
+  const SPHINX_W = SPHINX[0].length, SPHINX_H = SPHINX.length;
+  // A small camel, drawn like the people (1 px, black outline), walking to the left: c camel, b the blue saddle cloth between its two
+  // humps. The body, then the legs in two steps. Designed with the author at 12x on a sheet first.
+  const CAMEL = [
+    ".......cc.....cc..",
+    ".cc...cccbbbbbbcc.",
+    "cccc..cccbbbbbbcc.",
+    "..cc..ccccccccccc.",
+    "...cccccccccccccc.",
+    "....cccccccccccccc",
+    ".....cccccccccccc."];
+  const CAMEL_LEGS = [
+    [".....c.c....c.c...", ".....c.c....c.c...", ".....c.c....c.c...", "....cc.cc..cc.cc.."],
+    ["......cc.....cc...", ".....c..c...c..c..", "....c...c..c...c..", "...cc..cc.cc..cc.."]];
+  // The rider, sitting between the humps (the people's figure): a round head, one arm forward holding the reins, the bottom a little
+  // out behind, the thigh flat forward on the saddle, the shin down and the foot forward.
+  const RIDER = ["....ww....", "....ww....", "...wwww...", "...www....", "..w.ww....", "....www...", "..wwww....", "..w.......", ".ww......."];
+  const RIDER_X = 7, RIDER_Y = 4;   // the rider's top-left from the camel's: 7 px back, 4 px up
+  const CAMEL_W = 18, CAMEL_H = CAMEL.length + 4 + RIDER_Y, CARAVAN_N = 3, CARAVAN_GAP = 24, CARAVAN_WALK = 7;   // three camels, 24 px apart, walking 7 px/s against the ground
+  // the monuments, left to right: ox from where the zone's first one enters (px); a pyramid's max is its tallest (dots)
+  const DZ_LAYOUT = [{ ox: 0, max: 14 }, { ox: 64, max: 20 }, { ox: 120, person: true }, { ox: 156, max: 11 }, { ox: 250, sphinx: true }, { ox: 440, max: 13 }, { ox: 494, max: 10 }];   // max: a pyramid's height (dots)
+  const CARAVAN_OX = 380;   // where the caravan starts in the layout: after the sphinx, so it walks past it
+  const DZ_LEN = 494 + 10 * DOT + 4;
+  const SAND = (() => {   // the dunes: dark sand at the bottom, pale moonlit sand on top
+    const a = new Uint32Array(MAX_BAR), top = DZ_SEG * SEG_PITCH;
+    for (let k = 0; k < MAX_BAR; k++) {
+      const t = Math.min(1, Math.floor(k / SEG_PITCH) * SEG_PITCH / (top - SEG_PITCH));
+      a[k] = k % SEG_PITCH >= SEG_H ? BLACK : rgb(Math.round(150 + 96 * t), Math.round(100 + 110 * t), Math.round(52 + 96 * t));
+    }
+    return a;
+  })();
+  const mix = (a, b, u) => { const f = (sh) => Math.round(((a >>> sh) & 255) * (1 - u) + ((b >>> sh) & 255) * u) << sh; return ((255 << 24) | f(16) | f(8) | f(0)) >>> 0; };
+  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], walked: 0 });   // walked: how far the caravan has walked (px)
+  const dzCx = (z, d) => DOT * Math.round((z.x + d.ox) / DOT);
+  function updateDesert(s, now, dt) {
+    const z = s.dz, k = s.k;
+    if (z.nextMs === 0) z.nextMs = now + (desertNow() ? 1500 : DZ_FIRST_MS);
+    if (z.ph === 0) {
+      if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (desertNow() || (k.musicSince && now - k.musicSince >= 3000))) {
+        z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0; z.walked = 0;
+        z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.max || 0 }));
+        const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + DZ_LEN) / SCROLL_PX_S * 1000;
+        k.nextMs = Math.max(k.nextMs, now + dur + 8000);             // no monster while it lasts
+        s.mz.nextMs = Math.max(s.mz.nextMs, now + dur + 30000);      // nor a meteor zone right after it
+        s.nextCityMs = Math.max(s.nextCityMs, now + dur + 8000);
+        s.nextLightMs = Math.min(s.nextLightMs, now + 2000);         // the searchlights come sooner
+      }
+      return;
+    }
+    z.t += dt;
+    z.x -= SCROLL_PX_S * dt;
+    z.walked += CARAVAN_WALK * dt;
+    if (z.ph === 1) { z.u = Math.min(1, z.t / DZ_IN_S); if (z.t >= DZ_IN_S) { z.ph = 2; z.t = 0; } }
+    else if (z.ph === 2) { if (z.x + DZ_LEN < 0) { z.ph = 3; z.t = 0; } }
+    else {
+      z.u = Math.max(0, 1 - z.t / DZ_OUT_S);
+      if (z.t >= DZ_OUT_S) { z.ph = 0; z.u = 0; z.items = []; z.nextMs = now + (desertNow() ? 30000 : DZ_MS_MIN + nextRandom(s) % (DZ_MS_MAX - DZ_MS_MIN)); return; }
+    }
+    if (s.beat) z.glow = 1;
+    z.glow = Math.max(0, z.glow - dt * 2.5);
+  }
+  function dzHeightAt(s, x) {   // how high the monuments stand at x (from the bottom of the screen, like the terrain), so the fighter flies over them
+    const z = s.dz; if (!z.ph) return 0;
+    let h = 0;
+    for (const d of z.items) {
+      const cx = dzCx(z, d);
+      if (d.sphinx) { if (x >= cx && x < cx + SPHINX_W * DOT) h = Math.max(h, GROUND + SPHINX_H * DOT); continue; }
+      if (!d.max) continue;
+      const rows = Math.round(d.hd) - Math.floor(Math.abs(x - cx - 1) / DOT);
+      if (rows > 0) h = Math.max(h, GROUND + rows * DOT);
+    }
+    const cx = z.x + CARAVAN_OX - z.walked;
+    if (x >= cx - 16 && x < cx + CARAVAN_N * CARAVAN_GAP) h = Math.max(h, GROUND + CAMEL_H);   // the caravan
+    return h;
+  }
+  // The moon over the desert: a round full moon in flat pixel-art colours like the people and the camels (no soft edges, no glow): a
+  // pale disc with three crater patches in one darker tone, all inside the rim so the outline stays round. It rises a little and
+  // brightens as the zone comes in.
+  const MOON_R = 11;
+  const MOON_CRATERS = [[-4, -3, 3], [4, 3, 2.5], [3, -5, 1.5], [-5, 5, 1.5]];   // x, y, radius (px from the middle)
+  // Four tones, light to dark, in flat pixel-art steps like the pyramids' faces. The light comes from up on the right, as on the pyramids:
+  // the moon is a ball, brightest up on the right and darkening toward the lower left; a crater is a hollow, its upper-right wall in
+  // shadow and its lower-left rim catching the light.
+  const MOON_TONES = [[252, 246, 218], [234, 222, 180], [200, 184, 140], [150, 134, 100]];
+  function renderMoon(s) {
+    const u = s.dz.u; if (u <= 0) return;
+    const cx = 192, cy = 30 - Math.round(8 * (1 - u)), R = MOON_R;
+    const tone = MOON_TONES.map(([r, g, b]) => mix(BLACK, rgb(r, g, b), u));
+    const L = [0.55, -0.55, 0.63];   // toward the light: right, up, toward us
+    for (let dy = -R; dy < R; dy++) for (let dx = -R; dx < R; dx++) {
+      const x = dx + 0.5, y = dy + 0.5;   // the pixel's middle: the disc is symmetric
+      if (x * x + y * y > R * R) continue;
+      const z = Math.sqrt(R * R - x * x - y * y), lum = (x * L[0] + y * L[1] + z * L[2]) / R;
+      let t = lum > 0.78 ? 0 : lum > 0.45 ? 1 : lum > 0.1 ? 2 : 3;   // the ball's shading
+      for (const [mx, my, mr] of MOON_CRATERS) {
+        const ox = x - mx, oy = y - my, d = Math.hypot(ox, oy);
+        if (d <= mr) t = Math.min(3, t + ((ox - oy) / Math.SQRT2 > mr * 0.25 ? 2 : 1));   // inside: darker, the upper-right wall darkest
+        else if (d <= mr + 1 && (ox - oy) / Math.SQRT2 < -mr * 0.4) t = Math.max(0, t - 1);   // the lower-left rim, lit
+      }
+      px(cx + dx, cy + dy, tone[t]);
+    }
+  }
+  function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
+    const z = s.dz; if (!z.ph) return;
+    const gy = H - GROUND, eye = mix(rgb(40, 28, 20), rgb(120, 255, 255), z.glow);
+    const col = { L: rgb(232, 194, 124), S: rgb(132, 94, 54), D: rgb(70, 48, 30), E: eye };
+    for (const d of z.items) {
+      if (d.person) { drawFigure(WAVER[WAVE_SEQ[Math.floor(now / 230) % 4]], dzCx(z, d), gy - PERSON_H, false); continue; }
+      if (!d.sphinx) continue;
+      const cx = dzCx(z, d);
+      for (let r = 0; r < SPHINX_H; r++) for (let c = 0; c < SPHINX_W; c++) {
+        const ch = SPHINX[r][c]; if (ch === ".") continue;
+        dot(cx + c * DOT, gy - (SPHINX_H - r) * DOT, ch === "N" ? (r & 1 ? rgb(52, 84, 170) : rgb(226, 182, 60)) : col[ch]);
+      }
+    }
+    renderCaravan(s, now);   // the caravan walks in front of the sphinx
+  }
+  function drawSprite(rows, x, y, col) {   // like drawFigure, any width: a black outline, then the colours
+    const hh = rows.length, ww = rows[0].length, at = (yy, xx) => (yy < 0 || yy >= hh || xx < 0 || xx >= ww) ? "." : rows[yy][xx];
+    for (let yy = -1; yy <= hh; yy++) for (let xx = -1; xx <= ww; xx++) {
+      if (at(yy, xx) !== ".") continue;
+      let near = false;
+      for (let oy = -1; oy <= 1 && !near; oy++) for (let ox = -1; ox <= 1; ox++) if (at(yy + oy, xx + ox) !== ".") { near = true; break; }
+      if (near) px(x + xx, y + yy, 0xff000000);
+    }
+    for (let yy = 0; yy < hh; yy++) for (let xx = 0; xx < ww; xx++) { const ch = at(yy, xx); if (ch !== ".") px(x + xx, y + yy, col[ch]); }
+  }
+  function renderCaravan(s, now) {   // a guide on foot in front, then the camels with their riders, swaying a little as they walk
+    const z = s.dz, gy = H - GROUND, cx = Math.round(z.x + CARAVAN_OX - z.walked);
+    const col = { c: rgb(168, 116, 66), b: rgb(60, 84, 176) };
+    if (cx - 14 > -PERSON_W && cx - 14 < W) drawFigure(RUNNER[Math.floor(now / 260) % 3], cx - 14, gy - PERSON_H, true);   // walking left (the runner, slowed down)
+    for (let n = 0; n < CARAVAN_N; n++) {
+      const x0 = cx + n * CARAVAN_GAP; if (x0 > W || x0 < -CAMEL_W) continue;
+      const step = (Math.floor(now / 320) + n) & 1;
+      const y0 = gy - (CAMEL.length + 4) + 1 - step;
+      drawSprite(CAMEL.concat(CAMEL_LEGS[step]), x0, y0, col);
+      const rx = x0 + RIDER_X, ry = y0 - RIDER_Y;
+      drawFigure(RIDER, rx, ry, false);   // the rider
+      for (let k = 3; k <= 6; k++) px(rx + k, ry + 7, col.b);   // the saddle cloth showing under the thigh and the bottom
+      const hx = rx + 2, hy = ry + 4, tx = x0 + 3, ty = y0 + 3, nn = Math.max(Math.abs(tx - hx), Math.abs(ty - hy));
+      for (let i = 1; i <= nn; i++) px(Math.round(hx + (tx - hx) * i / nn), Math.round(hy + (ty - hy) * i / nn), rgb(236, 196, 120));   // the reins: from the hand to the camel's neck
+    }
+  }
+  function renderDesert(s) {   // behind the dunes: the pyramids
+    const z = s.dz; if (!z.ph) return;
+    const gy = H - GROUND, g = z.glow;
+    const lit = rgb(232, 194, 124), lit2 = rgb(214, 174, 106), shade = rgb(132, 94, 54), shade2 = rgb(116, 82, 46), edge = rgb(252, 226, 168);
+    const cap = mix(rgb(220, 170, 40), rgb(255, 250, 190), g);
+    for (const d of z.items) {
+      const cx = dzCx(z, d);
+      if (!d.max) continue;   // the sphinx and the person: drawn in front of the dunes (renderSphinx)
+      const hd = Math.round(d.hd);
+      for (let r = 0; r < hd; r++) {
+        const y = gy - (hd - r) * DOT, course = r & 1;
+        for (let c = -r; c <= r; c++) {
+          let col;
+          if (r === 0) col = cap;                                   // the golden capstone
+          else if (c === r) col = edge;                             // the moonlit edge (the moon is up on the right)
+          else if (c > 0) col = course ? lit2 : lit;                // the face toward the moon, in courses of stone
+          else if (c === 0) col = lit2;                             // the ridge
+          else col = course ? shade2 : shade;                       // the face in shadow
+          dot(cx + c * DOT, y, col);
+        }
+      }
+      if (g > 0.05) { const a = Math.round(120 * g); addDot(cx, gy - (hd + 1) * DOT, a, a, Math.round(a * 0.4)); }   // a beat: a glint above the tip
     }
   }
 
@@ -852,7 +1042,7 @@ const FV = (() => {
         }
       }
       if (g.x < -g.n * CITY_W * DOT) { s.city = null; s.nextCityMs = now + CITY_MS_MIN + nextRandom(s) % (CITY_MS_MAX - CITY_MS_MIN); }
-    } else if (!s.mz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
+    } else if (!s.mz.ph && !s.dz.ph && (s.prevDb > DB_SILENT || cityNow()) && now - s.nextCityMs >= 0) s.city = newCity(s);
     // now and then a few people come out of an arch all at once and run after the fighter (SOUND TERRARIUM's runner, as it is); after a
     // while each stops and waves to the fighter as the ground carries it off
     if (g) {
@@ -938,7 +1128,7 @@ const FV = (() => {
     h: new Uint8Array(COLS), lastColMs: 0, lastFrameMs: 0, nextFireMs: 0, nextBombMs: 0, rng: 1,
     shipY: H - GROUND - SHIP_H - SHIP_CLEAR, avgDb: 0, prevDb: DB_SILENT, avgSet: false, beat: false,
     nextSpawnMs: 0, nextAimMs: 0, lunge: 0, k: newKong(), evadeCur: 0, lights: [], nextLightMs: 0, city: null, nextCityMs: 0, sparks: [], cit: [], citAcc: 0, cruiser: null, bb: [], ms: [], smoke: [],
-    mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [],
+    mz: { ph: 0, t: 0, u: 0, nextMs: 0, acc: 0, dustAcc: 0, ph0: 0 }, met: [], dust: [], dz: newDesert(),
     e:Array.from({ length: MAX_ENEMIES }, newEnemy),
     mine: Array.from({ length: MAX_MINES }, () => ({ x: 0, y: 0, age: 0, on: false })),
     eb: Array.from({ length: MAX_EBULLETS }, () => ({ x: 0, y: 0, vx: 0, vy: 0, on: false })),
@@ -1018,11 +1208,12 @@ const FV = (() => {
   const colX = (i, off) => W - off - i * PITCH;
   const scrollOffset = (s, now) => Math.floor(Math.min(now - s.lastColMs, COL_MS) * PITCH / COL_MS);
   const colAt = (x, off) => { const d = W - off - x; return d < 0 ? -1 : Math.floor((d + PITCH - 1) / PITCH); };
-  const eqHeight = (s, j) => s.eq ? mzHeight(s, Math.round(s.eqH[j] * s.scale) * SEG_PITCH) : 0;
+  const eqHeight = (s, j) => s.eq ? mzHeight(s, Math.round(s.eqH[j] * s.scale) * SEG_PITCH, true) : 0;
   function heightAt(s, x, off) {
     const i = colAt(x, off);
     let h = i < 0 ? 0 : i < COLS ? mzHeight(s, s.h[i]) : GROUND;
     if (s.eq && x >= 0 && x < EQ_BANDS * PITCH) h = Math.max(h, eqHeight(s, Math.floor(x / PITCH)));
+    if (s.dz.ph) h = Math.max(h, dzHeightAt(s, x));
     return h;
   }
   function carve(s, i, n) { if (i < 0 || i >= COLS) return; s.h[i] = Math.max(GROUND, s.h[i] - n * SEG_PITCH); }
@@ -1131,6 +1322,7 @@ const FV = (() => {
     updateTurns(s, now, dt);
     if (s.eq) updateEq(s, dt);
     updateMeteorZone(s, now, dt, sx);
+    updateDesert(s, now, dt);
 
     let tallest = GROUND;
     for (let x = sx; x < sx + SHIP_W + 60; x += 2) tallest = Math.max(tallest, heightAt(s, x, off));
@@ -1285,7 +1477,7 @@ const FV = (() => {
       s.nextFireMs = now + interval(s, FIRE_MS_MIN, FIRE_MS_MAX);
       fireLaser(s, sx, sy);
     }
-    if (!s.mz.ph && now - s.nextBombMs >= 0) {
+    if (!s.mz.ph && !s.dz.ph && now - s.nextBombMs >= 0) {   // no bombs on the pyramids
       s.nextBombMs = now + interval(s, BOMB_MS_MIN, BOMB_MS_MAX);
       for (const b of s.b) if (!b.on) { Object.assign(b, { x: sx + 3 * DOT, y: sy + SHIP_H, vx: BOMB_VX, vy: 0, on: true }); break; }
     }
@@ -1336,16 +1528,20 @@ const FV = (() => {
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
       for (let t = Math.round(s.mz.u * (st.near ? 10 : 4)); t > 0; t--) px(x + 1 + t, y, c);
     }
+    renderMoon(s);                                         // the moon over the desert
     renderCruiser(s, now);                                  // the cruiser: in the sky, behind everything but the stars
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
+    renderDesert(s);                                       // the pyramids and the sphinx: behind the dunes
+    const du = s.dz.u, lit = du > 0 ? Array.from(s.lit, (c, k) => mix(c, SAND[k], du)) : s.lit;   // in the desert the terrain turns to sand
     for (let i = 0; i < COLS; i++) {
       const x0 = colX(i, off), h = mzHeight(s, s.h[i]);
       for (let dx = 0; dx < BAR_W; dx++) {
         const x = x0 + dx; if (x < 0 || x >= W) continue;
-        for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = s.lit[k];
+        for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = lit[k];
       }
     }
+    renderSphinx(s, now);                                     // the sphinx: in front of the dunes
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
     renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
     renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
@@ -1371,11 +1567,11 @@ const FV = (() => {
     if (s.eq) {
       for (let j = 0; j < EQ_BANDS; j++) {
         const x0 = j * PITCH + (PITCH - BAR_W) / 2, h = eqHeight(s, j);
-        let peak = s.scale >= 1 && !s.mz.u ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
+        let peak = s.scale >= 1 && !s.mz.u && !s.dz.u ? (Math.round(s.eqPeak[j]) - 1) * SEG_PITCH : -1;
         if (peak < h) peak = -1;
         for (let dx = 0; dx < BAR_W; dx++) {
           const x = x0 + dx;
-          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? s.eqCol[s.pattern - 1][j] : BLACK;
+          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], mix(SAND[k], rgb(255, 255, 255), 0.45), du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too, paler than the dunes
           if (peak >= 0) for (let k = peak; k < peak + SEG_H; k++) fb[(H - 1 - k) * W + x] = C.peak;
         }
       }
