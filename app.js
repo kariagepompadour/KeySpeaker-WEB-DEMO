@@ -608,18 +608,12 @@ const FV = (() => {
     "LLLLLLLLLLLLSLLLLLLLLLLLLLLLLS.",
     "LDLDLLLLLLLLSLLLLLLLLLLLLLLLLLS"];
   const SPHINX_W = SPHINX[0].length, SPHINX_H = SPHINX.length;
-  // A small camel with a rider, drawn like the people (1 px, black outline), walking to the left: c camel, w the rider's white
-  // headcloth, b the blue robe. The body, then the legs in two steps.
+  // A small camel, drawn like the people (1 px, black outline), walking to the left, a blue saddle cloth on its hump: c camel, b cloth.
+  // The body, then the legs in two steps. Its rider is one of the people: the upper half of the waving figure, as at the city's windows.
   const CAMEL = [
-    "..........ww......",
-    ".........wwww.....",
-    ".........wwww.....",
-    "..........ww......",
-    ".........bbbb.....",
-    "........bbbbbb....",
-    "........bbbbbb....",
-    ".cc.....bbbbbb....",
-    "cccc...cbbbbbbc...",
+    "........bbbbb.....",
+    ".cc....bbbbbbb....",
+    "cccc..cbbbbbbbc...",
     "..cc..cccccccccc..",
     "...cccccccccccccc.",
     "....cccccccccccccc",
@@ -627,7 +621,7 @@ const FV = (() => {
   const CAMEL_LEGS = [
     [".....c.c....c.c...", ".....c.c....c.c...", ".....c.c....c.c...", "....cc.cc..cc.cc.."],
     ["......cc.....cc...", ".....c..c...c..c..", "....c...c..c...c..", "...cc..cc.cc..cc.."]];
-  const CAMEL_W = 18, CAMEL_H = CAMEL.length + 4, CARAVAN_N = 3, CARAVAN_GAP = 24, CARAVAN_WALK = 7;   // three camels, 24 px apart, walking 7 px/s against the ground
+  const CAMEL_W = 18, RIDER_H = 6, CAMEL_H = CAMEL.length + 4 + RIDER_H - 1, CARAVAN_N = 3, CARAVAN_GAP = 24, CARAVAN_WALK = 7;   // three camels, 24 px apart, walking 7 px/s against the ground
   // the monuments, left to right: ox from where the zone's first one enters (px); a pyramid's max is its tallest (dots)
   const DZ_LAYOUT = [{ ox: 0, max: 13 }, { ox: 64, max: 19 }, { ox: 120, person: true }, { ox: 156, max: 10 }, { ox: 250, sphinx: true }, { ox: 440, max: 12 }, { ox: 494, max: 8 }];
   const CARAVAN_OX = 380;   // where the caravan starts in the layout: after the sphinx, so it walks past it
@@ -737,14 +731,16 @@ const FV = (() => {
     }
     for (let yy = 0; yy < hh; yy++) for (let xx = 0; xx < ww; xx++) { const ch = at(yy, xx); if (ch !== ".") px(x + xx, y + yy, col[ch]); }
   }
-  function renderCaravan(s, now) {   // a guide on foot in front, then the camels, swaying a little as they walk
+  function renderCaravan(s, now) {   // a guide on foot in front, then the camels with their riders, swaying a little as they walk
     const z = s.dz, gy = H - GROUND, cx = Math.round(z.x + CARAVAN_OX - z.walked);
-    const col = { c: rgb(168, 116, 66), w: rgb(240, 238, 226), b: rgb(60, 84, 176) };
+    const col = { c: rgb(168, 116, 66), b: rgb(60, 84, 176) };
     if (cx - 14 > -PERSON_W && cx - 14 < W) drawFigure(RUNNER[Math.floor(now / 260) % 3], cx - 14, gy - PERSON_H, true);   // walking left (the runner, slowed down)
     for (let n = 0; n < CARAVAN_N; n++) {
       const x0 = cx + n * CARAVAN_GAP; if (x0 > W || x0 < -CAMEL_W) continue;
       const step = (Math.floor(now / 320) + n) & 1;
-      drawSprite(CAMEL.concat(CAMEL_LEGS[step]), x0, gy - CAMEL_H + 1 - step, col);
+      const y0 = gy - (CAMEL.length + 4) + 1 - step;
+      drawSprite(CAMEL.concat(CAMEL_LEGS[step]), x0, y0, col);
+      drawFigure(WAVER[WAVE_SEQ[(Math.floor(now / 230) + n * 3) % 4]].slice(0, RIDER_H), x0 + 5, y0 - RIDER_H + 1, false);   // the rider, waving to the fighter
     }
   }
   function renderDesert(s) {   // behind the dunes: the pyramids
