@@ -607,8 +607,19 @@ const FV = (() => {
     "LLLLLLLLLLLSLLLLLLLLLLLLLLLLS.",
     "LDLDLLLLLLLSLLLLLLLLLLLLLLLLLS"];
   const SPHINX_W = SPHINX[0].length, SPHINX_H = SPHINX.length;
+  // a camel with a rider, walking to the left (h / C the camel, w the rider's white headcloth, b the blue robe); the legs in two steps
+  const CAMEL = [
+    "......w.....",
+    "......bb....",
+    ".hh..bbbb...",
+    "hhh..CCCC...",
+    ".hC.CCCCCC..",
+    "..CCCCCCCCC.",
+    "...CCCCCCCCh"];
+  const CAMEL_LEGS = [["...C.C..C.C.", "...C.C..C.C."], ["....CC...CC.", "...C..C.C..C"]];
+  const CAMEL_W = 12, CAMEL_H = CAMEL.length + 2, CARAVAN_N = 3, CARAVAN_GAP = 40, CARAVAN_WALK = 9;   // three camels, 40 px apart, walking 9 px/s against the ground
   // the monuments, left to right: ox from where the zone's first one enters (px); a pyramid's max is its tallest (dots)
-  const DZ_LAYOUT = [{ ox: 0, max: 13 }, { ox: 64, max: 19 }, { ox: 156, max: 10 }, { ox: 250, sphinx: true }, { ox: 440, max: 12 }, { ox: 494, max: 8 }];
+  const DZ_LAYOUT = [{ ox: 0, max: 13 }, { ox: 64, max: 19 }, { ox: 120, person: true }, { ox: 156, max: 10 }, { ox: 250, sphinx: true }, { ox: 440, max: 12 }, { ox: 494, max: 8 }];
   const DZ_LEN = 494 + 8 * DOT + 4;
   const SAND = (() => {   // the dunes: dark sand at the bottom, pale moonlit sand on top
     const a = new Uint32Array(MAX_BAR), top = DZ_SEG * SEG_PITCH;
@@ -619,7 +630,7 @@ const FV = (() => {
     return a;
   })();
   const mix = (a, b, u) => { const f = (sh) => Math.round(((a >>> sh) & 255) * (1 - u) + ((b >>> sh) & 255) * u) << sh; return ((255 << 24) | f(16) | f(8) | f(0)) >>> 0; };
-  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [] });
+  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], cx: 0 });   // cx: where the caravan's guide walks (screen px)
   const dzCx = (z, d) => DOT * Math.round((z.x + d.ox) / DOT);
   function updateDesert(s, now, dt) {
     const z = s.dz, k = s.k;
@@ -627,7 +638,8 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (desertNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0;
-        z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.sphinx ? 0 : d.max * 0.6 }));
+        z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.max ? d.max * 0.6 : 0 }));
+        z.cx = z.x + 400;   // the caravan comes after the sphinx and walks past it
         const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + DZ_LEN) / SCROLL_PX_S * 1000;
         k.nextMs = Math.max(k.nextMs, now + dur + 8000);             // no monster while it lasts
         s.mz.nextMs = Math.max(s.mz.nextMs, now + dur + 30000);      // nor a meteor zone right after it
@@ -638,6 +650,7 @@ const FV = (() => {
     }
     z.t += dt;
     z.x -= SCROLL_PX_S * dt;
+    z.cx -= (SCROLL_PX_S + CARAVAN_WALK) * dt;
     if (z.ph === 1) { z.u = Math.min(1, z.t / DZ_IN_S); if (z.t >= DZ_IN_S) { z.ph = 2; z.t = 0; } }
     else if (z.ph === 2) { if (z.x + DZ_LEN < 0) { z.ph = 3; z.t = 0; } }
     else {
@@ -648,7 +661,7 @@ const FV = (() => {
     z.glow = Math.max(0, z.glow - dt * 2.5);
     let n = 0;
     for (const d of z.items) {
-      if (d.sphinx) continue;
+      if (!d.max) continue;
       const h = s.h[Math.min(COLS - 1, 2 * n++)];   // each pyramid hears the music a little later than the one before
       const t = Math.min(1, Math.max(0, (h - GROUND) / (MAX_BAR - GROUND)));
       d.hd += (d.max * (0.45 + 0.55 * t) - d.hd) * (1 - Math.exp(-dt / DZ_EASE_S));
@@ -660,9 +673,11 @@ const FV = (() => {
     for (const d of z.items) {
       const cx = dzCx(z, d);
       if (d.sphinx) { if (x >= cx && x < cx + SPHINX_W * DOT) h = Math.max(h, GROUND + SPHINX_H * DOT); continue; }
+      if (!d.max) continue;
       const rows = Math.round(d.hd) - Math.floor(Math.abs(x - cx - 1) / DOT);
       if (rows > 0) h = Math.max(h, GROUND + rows * DOT);
     }
+    if (x >= z.cx - 16 && x < z.cx + CARAVAN_N * CARAVAN_GAP) h = Math.max(h, GROUND + CAMEL_H * DOT);   // the caravan
     return h;
   }
   function renderMoon(s) {   // a big pale moon, rising with the zone
@@ -675,17 +690,32 @@ const FV = (() => {
       px(mx + dx, my + dy, rgb(Math.round(244 * v), Math.round(236 * v), Math.round(200 * v)));
     }
   }
-  function renderSphinx(s) {   // in front of the dunes, so it is seen whole
+  function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
     const z = s.dz; if (!z.ph) return;
     const gy = H - GROUND, eye = mix(rgb(40, 28, 20), rgb(120, 255, 255), z.glow);
     const col = { L: rgb(232, 194, 124), S: rgb(132, 94, 54), D: rgb(70, 48, 30), E: eye };
     for (const d of z.items) {
+      if (d.person) { drawFigure(WAVER[WAVE_SEQ[Math.floor(now / 230) % 4]], dzCx(z, d), gy - PERSON_H, false); continue; }
       if (!d.sphinx) continue;
       const cx = dzCx(z, d);
       for (let r = 0; r < SPHINX_H; r++) for (let c = 0; c < SPHINX_W; c++) {
         const ch = SPHINX[r][c]; if (ch === ".") continue;
         dot(cx + c * DOT, gy - (SPHINX_H - r) * DOT, ch === "N" ? (r & 1 ? rgb(52, 84, 170) : rgb(226, 182, 60)) : col[ch]);
       }
+    }
+    renderCaravan(s, now);   // the caravan walks in front of the sphinx
+  }
+  function renderCaravan(s, now) {   // a guide on foot in front, then the camels, swaying a little as they walk
+    const z = s.dz, gy = H - GROUND;
+    const col = { h: rgb(118, 78, 44), C: rgb(96, 62, 36), w: rgb(240, 238, 226), b: rgb(60, 84, 176) };
+    const gx = Math.round(z.cx) - 16;
+    if (gx > -PERSON_W && gx < W) drawFigure(RUNNER[Math.floor(now / 260) % 3], gx, gy - PERSON_H, true);   // walking left (the runner, slowed down)
+    for (let n = 0; n < CARAVAN_N; n++) {
+      const x0 = DOT * Math.round((z.cx + n * CARAVAN_GAP) / DOT); if (x0 > W || x0 < -CAMEL_W * DOT) continue;
+      const step = (Math.floor(now / 300) + n) & 1, bob = step ? 0 : 1;
+      const y0 = gy - CAMEL_H * DOT;
+      for (let r = 0; r < CAMEL.length; r++) for (let c = 0; c < CAMEL_W; c++) { const ch = CAMEL[r][c]; if (ch !== ".") dot(x0 + c * DOT, y0 + r * DOT + bob, col[ch]); }
+      for (let r = 0; r < 2; r++) for (let c = 0; c < CAMEL_W; c++) if (CAMEL_LEGS[step][r][c] !== ".") dot(x0 + c * DOT, y0 + (CAMEL.length + r) * DOT, col.C);
     }
   }
   function renderDesert(s) {   // behind the dunes: the pyramids
@@ -695,7 +725,7 @@ const FV = (() => {
     const cap = mix(rgb(220, 170, 40), rgb(255, 250, 190), g);
     for (const d of z.items) {
       const cx = dzCx(z, d);
-      if (d.sphinx) continue;   // drawn in front of the dunes (renderSphinx)
+      if (!d.max) continue;   // the sphinx and the person: drawn in front of the dunes (renderSphinx)
       const hd = Math.round(d.hd);
       for (let r = 0; r < hd; r++) {
         const y = gy - (hd - r) * DOT, course = r & 1;
@@ -1480,7 +1510,7 @@ const FV = (() => {
         for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = lit[k];
       }
     }
-    renderSphinx(s);                                       // the sphinx: in front of the dunes
+    renderSphinx(s, now);                                     // the sphinx: in front of the dunes
     if (LIGHTS_FRONT) renderLights(s, now);                // the searchlights: in front of the monsters and the terrain, behind the equalizer
     renderKong(s, now, true);                              // both arms (the squid's stretching tentacles): in front of the terrain and the beams, behind the city
     renderCity(s, now);                                    // the city and its people: in front of the monsters' arms, the terrain and the searchlight beams, behind the equalizer
