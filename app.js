@@ -621,9 +621,9 @@ const FV = (() => {
   const CAMEL_LEGS = [
     [".....c.c....c.c...", ".....c.c....c.c...", ".....c.c....c.c...", "....cc.cc..cc.cc.."],
     ["......cc.....cc...", ".....c..c...c..c..", "....c...c..c...c..", "...cc..cc.cc..cc.."]];
-  // The rider astride: the upper half of the people's figure (waving, or sitting still), and a leg hanging down the camel's side.
+  // The rider astride, sitting still with the arms down (the people's figure), a leg hanging down the camel's side.
   const RIDER_STILL = ["....ww....", "...wwww...", "....ww....", "...wwww...", "..w.ww.w..", "....ww...."];   // arms down at the sides
-  const RIDER_LEG = ["....www...", "...w......", "..ww......"];   // the thigh on the saddle, the shin down and forward
+  const RIDER_LEG = ["..www.....", "..w.......", ".ww......."];   // the thigh forward (to the left, where the camel goes), the shin down, the foot forward
   const CAMEL_W = 18, RIDER_H = 6, CAMEL_H = CAMEL.length + 4 + RIDER_H - 1, CARAVAN_N = 3, CARAVAN_GAP = 24, CARAVAN_WALK = 7;   // three camels, 24 px apart, walking 7 px/s against the ground
   // the monuments, left to right: ox from where the zone's first one enters (px); a pyramid's max is its tallest (dots)
   const DZ_LAYOUT = [{ ox: 0, max: 13 }, { ox: 64, max: 19 }, { ox: 120, person: true }, { ox: 156, max: 10 }, { ox: 250, sphinx: true }, { ox: 440, max: 12 }, { ox: 494, max: 8 }];
@@ -638,7 +638,7 @@ const FV = (() => {
     return a;
   })();
   const mix = (a, b, u) => { const f = (sh) => Math.round(((a >>> sh) & 255) * (1 - u) + ((b >>> sh) & 255) * u) << sh; return ((255 << 24) | f(16) | f(8) | f(0)) >>> 0; };
-  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], walked: 0, wave: 0 });   // walked: how far the caravan has walked (px)
+  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], walked: 0 });   // walked: how far the caravan has walked (px)
   const dzCx = (z, d) => DOT * Math.round((z.x + d.ox) / DOT);
   function updateDesert(s, now, dt) {
     const z = s.dz, k = s.k;
@@ -646,7 +646,6 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (desertNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0; z.walked = 0;
-        z.wave = 1 + nextRandom(s) % 6;   // which riders wave this time (bits 0..2): at least one, never all three
         z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.max ? d.max * 0.6 : 0 }));
         const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + DZ_LEN) / SCROLL_PX_S * 1000;
         k.nextMs = Math.max(k.nextMs, now + dur + 8000);             // no monster while it lasts
@@ -739,8 +738,7 @@ const FV = (() => {
       const step = (Math.floor(now / 320) + n) & 1;
       const y0 = gy - (CAMEL.length + 4) + 1 - step;
       drawSprite(CAMEL.concat(CAMEL_LEGS[step]), x0, y0, col);
-      const top = (z.wave >> n) & 1 ? WAVER[WAVE_SEQ[(Math.floor(now / 230) + n * 3) % 4]].slice(0, RIDER_H) : RIDER_STILL;
-      drawFigure(top.concat(RIDER_LEG), x0 + 5, y0 - RIDER_H + 1, false);   // the rider: waving to the fighter, or sitting still, a leg down the camel's side
+      drawFigure(RIDER_STILL.concat(RIDER_LEG), x0 + 5, y0 - RIDER_H + 1, false);   // the rider
     }
   }
   function renderDesert(s) {   // behind the dunes: the pyramids
