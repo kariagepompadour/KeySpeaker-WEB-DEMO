@@ -503,7 +503,7 @@ const FV = (() => {
   const mzTop = () => TOP + 6, mzBottom = () => H - MZ_SEG * SEG_PITCH - SHIP_H - 6;
   const mzPath = (s, ms) => { const t = ms * 0.001 + s.mz.ph0, mid = (mzTop() + mzBottom()) / 2, a = (mzBottom() - mzTop()) / 2;
     return mid + a * (0.62 * Math.sin(t * 1.1) + 0.38 * Math.sin(t * 2.3 + 1)); };
-  const mzHeight = (s, h) => { let u = s.mz.u, seg = MZ_SEG; if (s.dz.u > u) { u = s.dz.u; seg = DZ_SEG; }   // the meteor zone's low terrain, or the desert's dunes
+  const mzHeight = (s, h, eq) => { let u = s.mz.u, seg = MZ_SEG; if (s.dz.u > u) { u = s.dz.u; seg = eq ? DZ_SEG * NSEG / EQ_NSEG : DZ_SEG; }   // the meteor zone's low terrain, or the desert's dunes (the equalizer as tall as the dunes)
     return u > 0 ? Math.max(GROUND, Math.round(h * (1 - u * (1 - seg / NSEG)) / SEG_PITCH) * SEG_PITCH) : h; };
   function spawnMeteor(s, now, sx, size) {
     if (s.met.length >= MZ_MAX) return;
@@ -589,7 +589,7 @@ const FV = (() => {
      sphinx flow by with the ground under searchlights. No monsters, no city, no bombs. The pyramids breathe with the music: each one's height
      follows the volume (each a little later than the one before, so a wave runs through them), and a beat lights the golden capstones and the
      sphinx's eyes. ?desert=now: one soon after start, then every 30 s. ---- */
-  const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 4, DZ_EASE_S = 0.18;
+  const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 7, DZ_EASE_S = 0.18;
   const desertNow = () => typeof location !== "undefined" && /desert=now/.test(location.search);
   // the sphinx, lying with its paws to the left and its face turned toward us (L moonlit stone, S shade, D dark lines, E the two eyes,
   // N the striped headdress falling on both sides of the face: gold and blue rows)
@@ -1216,7 +1216,7 @@ const FV = (() => {
   const colX = (i, off) => W - off - i * PITCH;
   const scrollOffset = (s, now) => Math.floor(Math.min(now - s.lastColMs, COL_MS) * PITCH / COL_MS);
   const colAt = (x, off) => { const d = W - off - x; return d < 0 ? -1 : Math.floor((d + PITCH - 1) / PITCH); };
-  const eqHeight = (s, j) => s.eq ? mzHeight(s, Math.round(s.eqH[j] * s.scale) * SEG_PITCH) : 0;
+  const eqHeight = (s, j) => s.eq ? mzHeight(s, Math.round(s.eqH[j] * s.scale) * SEG_PITCH, true) : 0;
   function heightAt(s, x, off) {
     const i = colAt(x, off);
     let h = i < 0 ? 0 : i < COLS ? mzHeight(s, s.h[i]) : GROUND;
@@ -1579,7 +1579,7 @@ const FV = (() => {
         if (peak < h) peak = -1;
         for (let dx = 0; dx < BAR_W; dx++) {
           const x = x0 + dx;
-          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], SAND[k], du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too
+          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], mix(SAND[k], rgb(255, 255, 255), 0.45), du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too, paler than the dunes
           if (peak >= 0) for (let k = peak; k < peak + SEG_H; k++) fb[(H - 1 - k) * W + x] = C.peak;
         }
       }
