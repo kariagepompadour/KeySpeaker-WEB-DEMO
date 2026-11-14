@@ -586,10 +586,9 @@ const FV = (() => {
   }
 
   /* ---- DESERT ZONE (trial): rarer than the meteor zone. The terrain sinks to low dunes the colour of sand, and pyramids and a
-     sphinx flow by with the ground under searchlights. No monsters, no city, no bombs. The pyramids breathe with the music: each one's height
-     follows the volume (each a little later than the one before, so a wave runs through them), and a beat lights the golden capstones and the
-     sphinx's eyes. ?desert=now: one soon after start, then every 30 s. ---- */
-  const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 7, DZ_EASE_S = 0.18;
+     sphinx flow by with the ground under searchlights. No monsters, no city, no bombs. The dunes and the equalizer move with the music; the
+     pyramids stand still (a pyramid that grows and shrinks looked wrong), and a beat lights their golden capstones and the sphinx's eyes. ?desert=now: one soon after start, then every 30 s. ---- */
+  const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 7;
   const desertNow = () => typeof location !== "undefined" && /desert=now/.test(location.search);
   // the sphinx, lying with its paws to the left and its face turned toward us (L moonlit stone, S shade, D dark lines, E the two eyes,
   // N the striped headdress falling on both sides of the face: gold and blue rows)
@@ -627,9 +626,9 @@ const FV = (() => {
   const RIDER_X = 7, RIDER_Y = 4;   // the rider's top-left from the camel's: 7 px back, 4 px up
   const CAMEL_W = 18, CAMEL_H = CAMEL.length + 4 + RIDER_Y, CARAVAN_N = 3, CARAVAN_GAP = 24, CARAVAN_WALK = 7;   // three camels, 24 px apart, walking 7 px/s against the ground
   // the monuments, left to right: ox from where the zone's first one enters (px); a pyramid's max is its tallest (dots)
-  const DZ_LAYOUT = [{ ox: 0, max: 13 }, { ox: 64, max: 19 }, { ox: 120, person: true }, { ox: 156, max: 10 }, { ox: 250, sphinx: true }, { ox: 440, max: 12 }, { ox: 494, max: 8 }];
+  const DZ_LAYOUT = [{ ox: 0, max: 14 }, { ox: 64, max: 20 }, { ox: 120, person: true }, { ox: 156, max: 11 }, { ox: 250, sphinx: true }, { ox: 440, max: 13 }, { ox: 494, max: 10 }];   // max: a pyramid's height (dots)
   const CARAVAN_OX = 380;   // where the caravan starts in the layout: after the sphinx, so it walks past it
-  const DZ_LEN = 494 + 8 * DOT + 4;
+  const DZ_LEN = 494 + 10 * DOT + 4;
   const SAND = (() => {   // the dunes: dark sand at the bottom, pale moonlit sand on top
     const a = new Uint32Array(MAX_BAR), top = DZ_SEG * SEG_PITCH;
     for (let k = 0; k < MAX_BAR; k++) {
@@ -647,7 +646,7 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (desertNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0; z.walked = 0;
-        z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.max ? d.max * 0.6 : 0 }));
+        z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.max || 0 }));
         const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + DZ_LEN) / SCROLL_PX_S * 1000;
         k.nextMs = Math.max(k.nextMs, now + dur + 8000);             // no monster while it lasts
         s.mz.nextMs = Math.max(s.mz.nextMs, now + dur + 30000);      // nor a meteor zone right after it
@@ -667,13 +666,6 @@ const FV = (() => {
     }
     if (s.beat) z.glow = 1;
     z.glow = Math.max(0, z.glow - dt * 2.5);
-    let n = 0;
-    for (const d of z.items) {
-      if (!d.max) continue;
-      const h = s.h[Math.min(COLS - 1, 2 * n++)];   // each pyramid hears the music a little later than the one before
-      const t = Math.min(1, Math.max(0, (h - GROUND) / (MAX_BAR - GROUND)));
-      d.hd += (d.max * (0.45 + 0.55 * t) - d.hd) * (1 - Math.exp(-dt / DZ_EASE_S));
-    }
   }
   function dzHeightAt(s, x) {   // how high the monuments stand at x (from the bottom of the screen, like the terrain), so the fighter flies over them
     const z = s.dz; if (!z.ph) return 0;
