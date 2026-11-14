@@ -613,8 +613,11 @@ const FV = (() => {
   const CAMEL = [
     "..........ww......",
     ".........wwww.....",
+    ".........wwww.....",
     "..........ww......",
     ".........bbbb.....",
+    "........bbbbbb....",
+    "........bbbbbb....",
     ".cc.....bbbbbb....",
     "cccc...cbbbbbbc...",
     "..cc..cccccccccc..",
@@ -687,6 +690,24 @@ const FV = (() => {
     const cx = z.x + CARAVAN_OX - z.walked;
     if (x >= cx - 16 && x < cx + CARAVAN_N * CARAVAN_GAP) h = Math.max(h, GROUND + CAMEL_H);   // the caravan
     return h;
+  }
+  // The moon over the desert: a plain round full moon, its edge softened so it reads round, with a faint glow around it. It rises a
+  // little and brightens as the zone comes in.
+  function addPx(x, y, r, g, b) {   // light added to what is there (the stars show through)
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    const i = y * W + x, c = fb[i];
+    fb[i] = ((255 << 24) | (Math.min(255, ((c >> 16) & 255) + b) << 16) | (Math.min(255, ((c >> 8) & 255) + g) << 8) | Math.min(255, (c & 255) + r)) >>> 0;
+  }
+  const MOON_R = 11, MOON_GLOW = 5;
+  function renderMoon(s) {
+    const u = s.dz.u; if (u <= 0) return;
+    const cx = 192, cy = 30 - Math.round(8 * (1 - u)), R = MOON_R + MOON_GLOW;
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+      const d = Math.hypot(dx + 0.5, dy + 0.5);   // from the middle of the pixel
+      const disc = Math.min(1, Math.max(0, MOON_R + 0.5 - d)), glow = d > MOON_R ? Math.max(0, 1 - (d - MOON_R) / MOON_GLOW) * 0.22 : 0;
+      const k = (disc + glow * (1 - disc)) * u; if (k <= 0) continue;
+      addPx(cx + dx, cy + dy, Math.round(250 * k), Math.round(240 * k), Math.round(200 * k));
+    }
   }
   function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
     const z = s.dz; if (!z.ph) return;
@@ -1502,6 +1523,7 @@ const FV = (() => {
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
       for (let t = Math.round(s.mz.u * (st.near ? 10 : 4)); t > 0; t--) px(x + 1 + t, y, c);
     }
+    renderMoon(s);                                         // the moon over the desert
     renderCruiser(s, now);                                  // the cruiser: in the sky, behind everything but the stars
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
