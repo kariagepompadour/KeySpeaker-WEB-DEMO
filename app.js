@@ -685,25 +685,20 @@ const FV = (() => {
     if (x >= cx - 16 && x < cx + CARAVAN_N * CARAVAN_GAP) h = Math.max(h, GROUND + CAMEL_H);   // the caravan
     return h;
   }
-  // The moon over the desert: a round full moon with a few soft craters, its edge softened so it reads round, with a faint glow around it. It rises a
-  // little and brightens as the zone comes in.
-  function addPx(x, y, r, g, b) {   // light added to what is there (the stars show through)
-    if (x < 0 || x >= W || y < 0 || y >= H) return;
-    const i = y * W + x, c = fb[i];
-    fb[i] = ((255 << 24) | (Math.min(255, ((c >> 16) & 255) + b) << 16) | (Math.min(255, ((c >> 8) & 255) + g) << 8) | Math.min(255, (c & 255) + r)) >>> 0;
-  }
-  const MOON_R = 11, MOON_GLOW = 5;
-  const MOON_CRATERS = [[-4, -3, 3.2], [4, 2, 2.6], [-1, 5, 2.0], [5, -5, 1.6], [-6, 3, 1.4]];   // x, y, radius (px from the middle): soft grey patches
+  // The moon over the desert: a round full moon in flat pixel-art colours like the people and the camels (no soft edges, no glow): a
+  // pale disc with three crater patches in one darker tone, all inside the rim so the outline stays round. It rises a little and
+  // brightens as the zone comes in.
+  const MOON_R = 11;
+  const MOON_CRATERS = [[-4, -3, 3], [4, 3, 2.5], [3, -5, 1.5]];   // x, y, radius (px from the middle)
   function renderMoon(s) {
     const u = s.dz.u; if (u <= 0) return;
-    const cx = 192, cy = 30 - Math.round(8 * (1 - u)), R = MOON_R + MOON_GLOW;
-    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-      const d = Math.hypot(dx + 0.5, dy + 0.5);   // from the middle of the pixel
-      const disc = Math.min(1, Math.max(0, MOON_R + 0.5 - d)), glow = d > MOON_R ? Math.max(0, 1 - (d - MOON_R) / MOON_GLOW) * 0.22 : 0;
-      let shade = 1;
-      for (const [mx, my, mr] of MOON_CRATERS) shade -= 0.3 * Math.min(1, Math.max(0, mr + 0.5 - Math.hypot(dx + 0.5 - mx, dy + 0.5 - my)));   // a crater: darker, its edge soft too
-      const k = (disc * Math.max(0.6, shade) + glow * (1 - disc)) * u; if (k <= 0) continue;
-      addPx(cx + dx, cy + dy, Math.round(250 * k), Math.round(240 * k), Math.round(200 * k));
+    const cx = 192, cy = 30 - Math.round(8 * (1 - u));
+    const lit = mix(BLACK, rgb(250, 240, 200), u), dark = mix(BLACK, rgb(206, 192, 150), u);
+    for (let dy = -MOON_R; dy < MOON_R; dy++) for (let dx = -MOON_R; dx < MOON_R; dx++) {
+      const x = dx + 0.5, y = dy + 0.5;   // the pixel's middle: the disc is symmetric
+      if (x * x + y * y > MOON_R * MOON_R) continue;
+      const crater = MOON_CRATERS.some(([mx, my, mr]) => (x - mx) * (x - mx) + (y - my) * (y - my) <= mr * mr);
+      px(cx + dx, cy + dy, crater ? dark : lit);
     }
   }
   function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
