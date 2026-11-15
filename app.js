@@ -644,43 +644,44 @@ const FV = (() => {
   const mix = (a, b, u) => { const f = (sh) => Math.round(((a >>> sh) & 255) * (1 - u) + ((b >>> sh) & 255) * u) << sh; return ((255 << 24) | f(16) | f(8) | f(0)) >>> 0; };
   const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], walked: 0, kind: 0, nextBeam: 0, beatAt: 0 });   // kind: 0 the desert, 1 the moai island   // walked: how far the caravan has walked (px)
   /* ---- MOAI ISLAND (trial): the desert zone's other face. The same rare slot (by lot, one or the other), the same low ground moving
-     with the music, but green grass, the sea behind it under a setting sun, and moai heads standing out of the grass, all turned to the
-     left (toward the fighter). On a beat the deep hollow under a moai's brow lights up, and now and then one shoots two thin beams from
-     it at the fighter (a hit only lights the fighter's shield). Designed with the author at 12x on a sheet first, after photos of Ahu
-     Tongariki: three-quarter view from the front left, leaning back a little as if looking up; a heavy brow, a deep hollow under it from
-     side to side (the part that glows), a long nose with a thin shadow beside it, quiet lips and chin; from the shoulders up only, and
-     no red topknot (few people know it). ?island=now: one soon after start, then every 30 s. ---- */
-  // H the lit edges (brow, nose ridge, lips, chin), L the face toward the setting sun (on the left), M the side of the head, S shade,
-  // D the deep shadows, E the hollow under the brow (dark, glowing on a beat)
+     with the music, but green grass, the sea behind it under a setting sun, and two ahu (stone platforms) with moai standing on them,
+     their faces toward us. On a beat a moai's two eyes light up, and now and then one opens its mouth and shoots two thin beams from it
+     at the fighter (a hit only lights the fighter's shield). No big monster, no city, no bombs, as in the desert. Designed with the
+     author at 12x on a sheet first: a long face, a heavy brow, a long nose, a thin mouth and a chin, the hands on the belly, in the same
+     flat dots as the pyramids (no outline). The author tried three-quarter views with more and more carving and came back to this simple
+     one; and no red topknot (few people know it). ?island=now: one soon after start, then every 30 s. ---- */
+  // L stone, H the lit ridge of the nose, S shade (the light is up on the right, as in the desert), D dark lines, E the eyes
   const MOAI = [
-    ".....LLLLMMMMS.",
-    "....LLLLLMMMMMS",
-    "....LLLLLMMMMMS",
-    "..HHHHHHHMMMMS.",
-    "..EEEEEEEEMMMS.",
-    "...HEEEEEELMMS.",
-    "...HLDDDLLMDMS.",
-    "...HLDLLLLMDMS.",
-    "..LHLSLLLLMDMS.",
-    ".HHHLLLLSMMDMS.",
-    ".DDDLLSMMMDMS..",
-    ".HLLLLSMMMMMS..",
-    ".DDLLLSMMMMS...",
-    "..LDDLSMMMMS...",
-    ".HHLLLSMMMMS...",
-    ".DDDDDSMMMMS...",
-    ".LLLLLMMMMMMS..",
-    "LLLLLLMMMMMMS..",
-    "LLLLLLMMMMMMS.." ];
-  const MOAI_W = 15, MOAI_H = MOAI.length;
-  // When it shoots, the jaw drops: rows 12-15 become an open mouth, two rows deep, with light flickering inside (K), the upper lip
-  // above it and the lower lip pushed down below it. The beams leave from it.
-  const MOAI_OPEN = MOAI.slice(0, 12).concat([".HLLLLSMMMMS...", ".KKDDDSMMMMS...", ".KKDDDSMMMMS...", ".HHLLLSMMMMS..."], MOAI.slice(16));
-  const MOAI_GUN = [1, 13], MOAI_FIRE_MS = 220, MOAI_OPEN_S = 0.7;   // where the beams leave; the wait from the eyes lighting to the shot; how long the mouth stays open
-  const MOAI_COL = { H: rgb(226, 216, 196), L: rgb(186, 174, 156), M: rgb(122, 112, 102), S: rgb(78, 72, 66), D: rgb(30, 27, 26) };
-  // two groups, five heads and three (ox in px from where the zone's first one enters)
-  const IZ_LAYOUT = [0, 57, 114, 171, 228, 340, 397, 454].map(ox => ({ ox, moai: true }));
-  const IZ_LEN = 454 + MOAI_W * DOT + 10;
+    ".SSLLLLLL.",
+    "SSLLLLLLLL",
+    "SSLLLLLLLL",
+    "SDDDLLDDDL",
+    "SDEDSLDEDL",
+    "SSLLSHLLLL",
+    "SSLLSHLLLL",
+    "SSLLSHLLLL",
+    "SSLSHHHLLL",
+    "SSLLDSDLLL",
+    "SSLLLLLLLL",
+    "SSLDDDDDLL",
+    "SSLLSSLLLL",
+    ".SLLLLLLL.",
+    "..SLLLLL..",
+    ".SSLLLLLLL",
+    "SDLLLLLLDL",
+    "SDLLLLLLDL",
+    "SSDDDLDDDL",
+    "SSLLLLLLLL"];
+  const MOAI_W = 10, MOAI_H = MOAI.length, AHU_H = 2;   // dots; the platform's height (dots)
+  // When it shoots, the jaw drops: the mouth opens two rows deep with light flickering inside (K), and the lower lip goes down a row.
+  // The beams leave from it.
+  const MOAI_OPEN = MOAI.slice(0, 11).concat(["SSLDKKKDLL", "SSLDDDDDLL", ".SLLSSLLL."], MOAI.slice(14));
+  const MOAI_GUN = [5, 11], MOAI_FIRE_MS = 220, MOAI_OPEN_S = 0.7;   // where the beams leave; the wait from the eyes lighting to the shot; how long the mouth stays open
+  const MOAI_COL = { L: rgb(150, 140, 128), H: rgb(196, 186, 170), S: rgb(92, 84, 78), D: rgb(38, 34, 32) };
+  // two ahu: five moai, then three (ox in px from where the zone's first one enters)
+  const IZ_LAYOUT = [0, 42, 84, 126, 168, 300, 342, 384].map(ox => ({ ox, moai: true }));
+  const IZ_AHU = [[-6, 168 + MOAI_W * DOT + 6], [294, 384 + MOAI_W * DOT + 6]];
+  const IZ_LEN = 384 + MOAI_W * DOT + 10;
   const IZ_BEAM_V = 150, IZ_BEAM_GAP_MS = 700;   // the eye beams: px/s, and the shortest time between two moai shooting
   const HORIZON = H - 38;   // the sea's horizon (px from the top), just above the tallest grass
   const GRASS = (() => {   // the grass: dark at the bottom, sunlit on top
@@ -721,9 +722,9 @@ const FV = (() => {
     z.glow = Math.max(0, z.glow - dt * 2.5);
     for (const d of z.items) if (d.moai) { d.glow = Math.max(0, d.glow - dt * 1.5); d.open = Math.max(0, d.open - dt); }
   }
-  // The moai's beams: on a beat, now and then, a moai in front of the fighter (to its right, on the screen) lights the hollow under its brow, then opens its mouth and shoots two thin beams from it at the fighter. They fly like
+  // The moai's beams: on a beat, now and then, a moai in front of the fighter (to its right, on the screen) lights its eyes, then opens its mouth and shoots two thin beams from it at the fighter. They fly like
   // the cruiser's bolts (s.bb): straight, and a hit only lights the shield.
-  const moaiTop = () => H - GROUND - MOAI_H * DOT;   // a moai's top (px): the heads stand on the ground
+  const moaiTop = () => H - GROUND - (AHU_H + MOAI_H) * DOT;   // a moai's top (px): on its ahu
   function updateMoaiBeams(s, now, sx, sy) {
     const z = s.dz; if (!z.kind || !z.ph) return;
     for (const d of z.items) {   // a shot that is due: from the open mouth
@@ -748,6 +749,7 @@ const FV = (() => {
     let h = 0;
     if (z.kind) {   // the moai island: the moai on their ahu
       for (const d of z.items) { const cx = dzCx(z, d); if (x >= cx && x < cx + MOAI_W * DOT) h = Math.max(h, H - moaiTop()); }
+      for (const [a, b] of IZ_AHU) if (x >= z.x + a && x < z.x + b) h = Math.max(h, GROUND + AHU_H * DOT);
       return h;
     }
     for (const d of z.items) {
@@ -770,8 +772,8 @@ const FV = (() => {
   // the moon is a ball, brightest up on the right and darkening toward the lower left; a crater is a hollow, its upper-right wall in
   // shadow and its lower-left rim catching the light.
   const MOON_TONES = [[252, 246, 218], [234, 222, 180], [200, 184, 140], [150, 134, 100]];
-  // The island's evening: the sky warms toward the horizon in flat bands, the sun sits half in the sea on the left (the moai's faces
-  // are lit from there), and the sea is dark blue with a path of the sun's light on it, glittering.
+  // The island's evening: the sky warms toward the horizon in flat bands, the sun sits half in the sea on the right (where the light comes
+  // from), and the sea is dark blue with a path of the sun's light on it, glittering.
   const SUNSET = [[255, 150, 60], [236, 104, 66], [184, 70, 92], [118, 46, 100], [64, 28, 84], [30, 16, 52]];   // from the horizon up, 6 px each
   function renderSunset(s, now) {
     const u = s.dz.u;
@@ -779,7 +781,7 @@ const FV = (() => {
       const c = mix(BLACK, rgb(...SUNSET[i]), u * (1 - i / (SUNSET.length + 1)));
       for (let y = HORIZON - (i + 1) * 6; y < HORIZON - i * 6; y++) for (let x = 0; x < W; x++) { const k = y * W + x; if (i < 3 || fb[k] === BLACK) fb[k] = c; }   // the stars show in the higher, darker bands
     }
-    const sx = 46, R = 13;   // on the left, where the moai's faces are lit from
+    const sx = 188, R = 13;   // on the right, where the light comes from
     for (let dy = -R; dy < 0; dy++) for (let dx = -R; dx < R; dx++) {   // the upper half of the sun, in flat rings
       const x = dx + 0.5, y = dy + 0.5, d = Math.hypot(x, y); if (d > R) continue;
       px(sx + dx, HORIZON + dy, mix(BLACK, d < R - 4 ? rgb(255, 236, 150) : d < R - 1.5 ? rgb(255, 196, 90) : rgb(250, 150, 64), u));
@@ -811,8 +813,10 @@ const FV = (() => {
       px(cx + dx, cy + dy, tone[t]);
     }
   }
-  function renderMoai(s, now) {   // the heads, on the ground; the hollow under the brow glows on a beat, brightest when it shoots, and the mouth opens to shoot
-    const z = s.dz, top = moaiTop();
+  function renderMoai(s, now) {   // the two ahu, then the moai on them; the eyes glow on a beat, fully while the mouth is open to shoot
+    const z = s.dz, top = moaiTop(), gy = H - GROUND, stone = rgb(70, 64, 60), stone2 = rgb(96, 88, 82);
+    for (const [a, b] of IZ_AHU) for (let x = Math.round(z.x + a); x < z.x + b; x += DOT) for (let r = 0; r < AHU_H; r++)
+      dot(x, gy - (r + 1) * DOT, ((Math.floor((x - z.x) / DOT) + r) % 3) ? stone : stone2);   // laid stones
     for (const d of z.items) {
       const cx = dzCx(z, d); if (cx > W || cx < -MOAI_W * DOT) continue;
       const eye = mix(MOAI_COL.D, rgb(120, 255, 255), d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
