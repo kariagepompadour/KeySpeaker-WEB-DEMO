@@ -50,6 +50,8 @@ Desert zone (trial): rarely the terrain becomes sand dunes under a full moon, an
 
 Moai island (trial): the desert's twin, coming in the same rare slot by lot. Green grass, the sea under a setting sun, and moai on two stone platforms; on a beat a moai's eyes light up and it opens its mouth to shoot thin beams at the fighter (they only light its shield), while islanders run after the fighter and wave. Add `?island=now` to see one soon after start, then every 30 s.
 
+Jungle ruins (trial): the third face of the same rare slot (by lot: the desert, the moai island or the jungle). A moonlit jungle with stepped Maya pyramids, big and small. The volume mountains keep their full height and turn brown, deep green, green and yellow-green, and the equalizer, on the screens that show it, turns teal. Behind them a white moon and sharp deep-green mountain ranges; torches flicker, fireflies drift, and people come out from behind a pyramid, run after the fighter and wave. On a beat a temple's roof glows a little. Add `?jungle=now` to see one soon after start, then one every 4 s.
+
 `Fn+M` cycles measure -> flight -> keyboard; the last mode is remembered (flight at first).
 
 </td>
