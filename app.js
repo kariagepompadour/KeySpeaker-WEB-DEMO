@@ -142,11 +142,13 @@ const FV = (() => {
     k.t += dt;
     let evadeTgt = 0;
     // it appears only while music is playing (3 s of sound; a gap of up to 2 s between notes or songs does not count as silence)
+    // and never in the desert or on the moai island (the zone holds k.nextMs back when it starts, but going back to this screen makes a new
+    // monster state while a zone is still running, so it is checked here too)
     if (s.prevDb > DB_SILENT) { if (!k.musicSince) k.musicSince = now; k.lastMusic = now; }
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && !s.cruiser && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
+      if (musicOk && !s.cruiser && !s.dz.ph && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
         // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
         // it only bluffs (the display, no reach at all).
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
@@ -590,6 +592,8 @@ const FV = (() => {
      pyramids stand still (a pyramid that grows and shrinks looked wrong), and a beat lights their golden capstones and the sphinx's eyes. ?desert=now: one soon after start, then every 30 s. ---- */
   const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 7;
   const desertNow = () => typeof location !== "undefined" && /desert=now/.test(location.search);
+  const islandNow = () => typeof location !== "undefined" && /island=now/.test(location.search);
+  const zoneNow = () => desertNow() || islandNow();
   // the sphinx, lying with its paws to the left and its face turned toward us (L moonlit stone, S shade, D dark lines, E the two eyes,
   // N the striped headdress falling on both sides of the face: gold and blue rows)
   const SPHINX = [
@@ -638,16 +642,67 @@ const FV = (() => {
     return a;
   })();
   const mix = (a, b, u) => { const f = (sh) => Math.round(((a >>> sh) & 255) * (1 - u) + ((b >>> sh) & 255) * u) << sh; return ((255 << 24) | f(16) | f(8) | f(0)) >>> 0; };
-  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], walked: 0 });   // walked: how far the caravan has walked (px)
+  const newDesert = () => ({ ph: 0, t: 0, u: 0, nextMs: 0, x: 0, glow: 0, items: [], walked: 0, kind: 0, nextBeam: 0, beatAt: 0 });   // kind: 0 the desert, 1 the moai island   // walked: how far the caravan has walked (px)
+  /* ---- MOAI ISLAND (trial): the desert zone's other face. The same rare slot (by lot, one or the other), the same low ground moving
+     with the music, but green grass, the sea behind it under a setting sun, and two ahu (stone platforms) with moai standing on them,
+     their faces toward us. On a beat a moai's two eyes light up, and now and then one opens its mouth and shoots two thin beams from it
+     at the fighter (a hit only lights the fighter's shield). No big monster, no city, no bombs, as in the desert. Designed with the
+     author at 12x on a sheet first: a long face, a heavy brow, a long nose, a thin mouth and a chin, the hands on the belly, in the same
+     flat dots as the pyramids (no outline). The author tried three-quarter views with more and more carving and came back to this simple
+     one; and no red topknot (few people know it). ?island=now: one soon after start, then every 30 s. ---- */
+  // L stone, H the lit ridge of the nose, S shade (the light is up on the right, as in the desert), D dark lines, E the eyes
+  const MOAI = [
+    ".SSLLLLLL.",
+    "SSLLLLLLLL",
+    "SSLLLLLLLL",
+    "SDDDLLDDDL",
+    "SDEDSLDEDL",
+    "SSLLSHLLLL",
+    "SSLLSHLLLL",
+    "SSLLSHLLLL",
+    "SSLSHHHLLL",
+    "SSLLDSDLLL",
+    "SSLLLLLLLL",
+    "SSLDDDDDLL",
+    "SSLLSSLLLL",
+    ".SLLLLLLL.",
+    "..SLLLLL..",
+    ".SSLLLLLLL",
+    "SDLLLLLLDL",
+    "SDLLLLLLDL",
+    "SSDDDLDDDL",
+    "SSLLLLLLLL"];
+  const MOAI_W = 10, MOAI_H = MOAI.length, AHU_H = 2;   // dots; the platform's height (dots)
+  // When it shoots, the jaw drops: the mouth opens two rows deep with light flickering inside (K), and the lower lip goes down a row.
+  // The beams leave from it.
+  const MOAI_OPEN = MOAI.slice(0, 11).concat(["SSLDKKKDLL", "SSLDDDDDLL", ".SLLSSLLL."], MOAI.slice(14));
+  const MOAI_GUN = [5, 11], MOAI_FIRE_MS = 220, MOAI_OPEN_S = 0.7;   // where the beams leave; the wait from the eyes lighting to the shot; how long the mouth stays open
+  const MOAI_GLOW = rgb(120, 255, 255), MOAI_GLOW_TAIL = rgb(60, 200, 255);   // the eyes, the mouth's light and the beams: cyan (red and yellow looked like holes showing the sunset through the stone)
+  const MOAI_COL = { L: rgb(150, 140, 128), H: rgb(196, 186, 170), S: rgb(92, 84, 78), D: rgb(38, 34, 32) };
+  // two ahu: five moai, then three (ox in px from where the zone's first one enters)
+  const IZ_LAYOUT = [0, 42, 84, 126, 168, 300, 342, 384].map(ox => ({ ox, moai: true }));
+  const IZ_AHU = [[-6, 168 + MOAI_W * DOT + 6], [294, 384 + MOAI_W * DOT + 6]];
+  const IZ_LEN = 384 + MOAI_W * DOT + 10;
+  const IZ_BEAM_V = 150, IZ_BEAM_GAP_MS = 700;   // the eye beams: px/s, and the shortest time between two moai shooting
+  const HORIZON = H - 38;   // the sea's horizon (px from the top), just above the tallest grass
+  const GRASS = (() => {   // the grass: dark at the bottom, sunlit on top
+    const a = new Uint32Array(MAX_BAR), top = DZ_SEG * SEG_PITCH;
+    for (let k = 0; k < MAX_BAR; k++) {
+      const t = Math.min(1, Math.floor(k / SEG_PITCH) * SEG_PITCH / (top - SEG_PITCH));
+      a[k] = k % SEG_PITCH >= SEG_H ? BLACK : rgb(Math.round(36 + 104 * t), Math.round(86 + 110 * t), Math.round(40 + 40 * t));
+    }
+    return a;
+  })();
   const dzCx = (z, d) => DOT * Math.round((z.x + d.ox) / DOT);
   function updateDesert(s, now, dt) {
     const z = s.dz, k = s.k;
-    if (z.nextMs === 0) z.nextMs = now + (desertNow() ? 1500 : DZ_FIRST_MS);
+    if (z.nextMs === 0) z.nextMs = now + (zoneNow() ? 1500 : DZ_FIRST_MS);
     if (z.ph === 0) {
-      if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (desertNow() || (k.musicSince && now - k.musicSince >= 3000))) {
-        z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0; z.walked = 0;
-        z.items = DZ_LAYOUT.map(d => ({ ...d, hd: d.max || 0 }));
-        const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + DZ_LEN) / SCROLL_PX_S * 1000;
+      if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (zoneNow() || (k.musicSince && now - k.musicSince >= 3000))) {
+        z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0; z.walked = 0; z.nextBeam = 0;
+        z.kind = desertNow() ? 0 : islandNow() ? 1 : nextRandom(s) & 1;   // the desert or the moai island, by lot
+        z.items = z.kind ? IZ_LAYOUT.map(d => ({ ...d, glow: 0, open: 0, fireAt: 0 })) : DZ_LAYOUT.map(d => ({ ...d, hd: d.max || 0 }));
+        const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + (z.kind ? IZ_LEN : DZ_LEN)) / SCROLL_PX_S * 1000;
         k.nextMs = Math.max(k.nextMs, now + dur + 8000);             // no monster while it lasts
         s.mz.nextMs = Math.max(s.mz.nextMs, now + dur + 30000);      // nor a meteor zone right after it
         s.nextCityMs = Math.max(s.nextCityMs, now + dur + 8000);
@@ -659,17 +714,45 @@ const FV = (() => {
     z.x -= SCROLL_PX_S * dt;
     z.walked += CARAVAN_WALK * dt;
     if (z.ph === 1) { z.u = Math.min(1, z.t / DZ_IN_S); if (z.t >= DZ_IN_S) { z.ph = 2; z.t = 0; } }
-    else if (z.ph === 2) { if (z.x + DZ_LEN < 0) { z.ph = 3; z.t = 0; } }
+    else if (z.ph === 2) { if (z.x + (z.kind ? IZ_LEN : DZ_LEN) < 0) { z.ph = 3; z.t = 0; } }
     else {
       z.u = Math.max(0, 1 - z.t / DZ_OUT_S);
-      if (z.t >= DZ_OUT_S) { z.ph = 0; z.u = 0; z.items = []; z.nextMs = now + (desertNow() ? 30000 : DZ_MS_MIN + nextRandom(s) % (DZ_MS_MAX - DZ_MS_MIN)); return; }
+      if (z.t >= DZ_OUT_S) { z.ph = 0; z.u = 0; z.items = []; z.nextMs = now + (zoneNow() ? 30000 : DZ_MS_MIN + nextRandom(s) % (DZ_MS_MAX - DZ_MS_MIN)); return; }
     }
-    if (s.beat) z.glow = 1;
+    if (s.beat) { z.glow = 1; z.beatAt = now; }   // the moai's beams use it later in the frame, after the enemies have taken s.beat
     z.glow = Math.max(0, z.glow - dt * 2.5);
+    for (const d of z.items) if (d.moai) { d.glow = Math.max(0, d.glow - dt * 1.5); d.open = Math.max(0, d.open - dt); }
   }
+  // The moai's beams: on a beat, now and then, a moai in front of the fighter (to its right, on the screen) lights its eyes, then opens its mouth and shoots two thin beams from it at the fighter. They fly like
+  // the cruiser's bolts (s.bb): straight, and a hit only lights the shield.
+  const moaiTop = () => H - GROUND - (AHU_H + MOAI_H) * DOT;   // a moai's top (px): on its ahu
+  function updateMoaiBeams(s, now, sx, sy) {
+    const z = s.dz; if (!z.kind || !z.ph) return;
+    for (const d of z.items) {   // a shot that is due: from the open mouth
+      if (!d.fireAt || now < d.fireAt) continue;
+      d.fireAt = 0;
+      const gx = dzCx(z, d) + MOAI_GUN[0] * DOT + 1, gy = moaiTop() + MOAI_GUN[1] * DOT + 1;
+      for (const k of [-1, 1]) {
+        const tx = sx + SHIP_W / 2 + k * 6 + (nextRandom(s) % 9) - 4, ty = sy + SHIP_H / 2 + k * 4 + (nextRandom(s) % 9) - 4, dd = Math.hypot(tx - gx, ty - gy) || 1;
+        s.bb.push({ x: gx, y: gy, ox: gx, oy: gy, vx: (tx - gx) / dd * IZ_BEAM_V, vy: (ty - gy) / dd * IZ_BEAM_V, age: 0, eye: true });
+      }
+    }
+    if (z.ph !== 2 || z.beatAt !== now || now < z.nextBeam || s.bb.length > 6) return;
+    const ready = z.items.filter(d => { const x = dzCx(z, d); return d.moai && x > sx + SHIP_W + 30 && x < W - MOAI_W * DOT; });
+    if (!ready.length) return;
+    const d = ready[nextRandom(s) % ready.length];
+    d.glow = 1; d.open = MOAI_OPEN_S; d.fireAt = now + MOAI_FIRE_MS;
+    z.nextBeam = now + IZ_BEAM_GAP_MS + nextRandom(s) % 900;
+  }
+
   function dzHeightAt(s, x) {   // how high the monuments stand at x (from the bottom of the screen, like the terrain), so the fighter flies over them
     const z = s.dz; if (!z.ph) return 0;
     let h = 0;
+    if (z.kind) {   // the moai island: the moai on their ahu
+      for (const d of z.items) { const cx = dzCx(z, d); if (x >= cx && x < cx + MOAI_W * DOT) h = Math.max(h, H - moaiTop()); }
+      for (const [a, b] of IZ_AHU) if (x >= z.x + a && x < z.x + b) h = Math.max(h, GROUND + AHU_H * DOT);
+      return h;
+    }
     for (const d of z.items) {
       const cx = dzCx(z, d);
       if (d.sphinx) { if (x >= cx && x < cx + SPHINX_W * DOT) h = Math.max(h, GROUND + SPHINX_H * DOT); continue; }
@@ -690,7 +773,30 @@ const FV = (() => {
   // the moon is a ball, brightest up on the right and darkening toward the lower left; a crater is a hollow, its upper-right wall in
   // shadow and its lower-left rim catching the light.
   const MOON_TONES = [[252, 246, 218], [234, 222, 180], [200, 184, 140], [150, 134, 100]];
-  function renderMoon(s) {
+  // The island's evening: the sky warms toward the horizon in flat bands, the sun sits half in the sea on the right (where the light comes
+  // from), and the sea is dark blue with a path of the sun's light on it, glittering.
+  const SUNSET = [[255, 150, 60], [236, 104, 66], [184, 70, 92], [118, 46, 100], [64, 28, 84], [30, 16, 52]];   // from the horizon up, 6 px each
+  function renderSunset(s, now) {
+    const u = s.dz.u;
+    for (let i = 0; i < SUNSET.length; i++) {
+      const c = mix(BLACK, rgb(...SUNSET[i]), u * (1 - i / (SUNSET.length + 1)));
+      for (let y = HORIZON - (i + 1) * 6; y < HORIZON - i * 6; y++) for (let x = 0; x < W; x++) { const k = y * W + x; if (i < 3 || fb[k] === BLACK) fb[k] = c; }   // the stars show in the higher, darker bands
+    }
+    const sx = 188, R = 13;   // on the right, where the light comes from
+    for (let dy = -R; dy < 0; dy++) for (let dx = -R; dx < R; dx++) {   // the upper half of the sun, in flat rings
+      const x = dx + 0.5, y = dy + 0.5, d = Math.hypot(x, y); if (d > R) continue;
+      px(sx + dx, HORIZON + dy, mix(BLACK, d < R - 4 ? rgb(255, 236, 150) : d < R - 1.5 ? rgb(255, 196, 90) : rgb(250, 150, 64), u));
+    }
+    const sea = mix(BLACK, rgb(22, 44, 92), u), sea2 = mix(BLACK, rgb(34, 66, 124), u), glit = mix(BLACK, rgb(255, 196, 100), u);
+    for (let y = HORIZON; y < H; y++) {
+      for (let x = 0; x < W; x++) fb[y * W + x] = (y - HORIZON) % 4 === 2 && ((x >> 3) + (y >> 1)) % 3 === 0 ? sea2 : sea;   // small waves
+      const dy = y - HORIZON; if (dy % 3 !== 1) continue;
+      const w = 4 + dy, t = Math.floor(now / 250);
+      for (let x = sx - w; x <= sx + w; x += 2) if (((Math.imul((x >> 1) * 73 + dy * 151 + t * 37, 2654435761) >>> 24) & 7) === 0) { px(x, y, glit); px(x + 1, y, glit); }   // the sun's path: short glints on the waves, here and there
+    }
+  }
+  function renderMoon(s, now) {
+    if (s.dz.kind) { if (s.dz.u > 0) renderSunset(s, now); return; }   // the moai island: an evening sky instead
     const u = s.dz.u; if (u <= 0) return;
     const cx = 192, cy = 30 - Math.round(8 * (1 - u)), R = MOON_R;
     const tone = MOON_TONES.map(([r, g, b]) => mix(BLACK, rgb(r, g, b), u));
@@ -708,8 +814,23 @@ const FV = (() => {
       px(cx + dx, cy + dy, tone[t]);
     }
   }
+  function renderMoai(s, now) {   // the two ahu, then the moai on them; the eyes glow on a beat, fully while the mouth is open to shoot
+    const z = s.dz, top = moaiTop(), gy = H - GROUND, stone = rgb(70, 64, 60), stone2 = rgb(96, 88, 82);
+    for (const [a, b] of IZ_AHU) for (let x = Math.round(z.x + a); x < z.x + b; x += DOT) for (let r = 0; r < AHU_H; r++)
+      dot(x, gy - (r + 1) * DOT, ((Math.floor((x - z.x) / DOT) + r) % 3) ? stone : stone2);   // laid stones
+    for (const d of z.items) {
+      const cx = dzCx(z, d); if (cx > W || cx < -MOAI_W * DOT) continue;
+      const eye = mix(MOAI_COL.D, MOAI_GLOW, d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
+      const art = d.open > 0 ? MOAI_OPEN : MOAI, inside = (Math.floor(now / 60) & 1) ? rgb(255, 255, 255) : MOAI_GLOW;
+      for (let r = 0; r < MOAI_H; r++) for (let c = 0; c < MOAI_W; c++) {
+        const ch = art[r][c]; if (ch === ".") continue;
+        dot(cx + c * DOT, top + r * DOT, ch === "E" ? eye : ch === "K" ? inside : MOAI_COL[ch]);
+      }
+    }
+  }
   function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
     const z = s.dz; if (!z.ph) return;
+    if (z.kind) { renderMoai(s, now); return; }
     const gy = H - GROUND, eye = mix(rgb(40, 28, 20), rgb(120, 255, 255), z.glow);
     const col = { L: rgb(232, 194, 124), S: rgb(132, 94, 54), D: rgb(70, 48, 30), E: eye };
     for (const d of z.items) {
@@ -750,7 +871,7 @@ const FV = (() => {
     }
   }
   function renderDesert(s) {   // behind the dunes: the pyramids
-    const z = s.dz; if (!z.ph) return;
+    const z = s.dz; if (!z.ph || z.kind) return;
     const gy = H - GROUND, g = z.glow;
     const lit = rgb(232, 194, 124), lit2 = rgb(214, 174, 106), shade = rgb(132, 94, 54), shade2 = rgb(116, 82, 46), edge = rgb(252, 226, 168);
     const cap = mix(rgb(220, 170, 40), rgb(255, 250, 190), g);
@@ -884,7 +1005,7 @@ const FV = (() => {
       q.x += q.vx * dt; q.y += q.vy * dt; q.age += dt;
       const bx = Math.trunc(q.x), ground = H - heightAt(s, bx, off);
       if (q.x > sx - DOT && q.x < sx + SHIP_W && q.y + DOT > sy && q.y < sy + SHIP_H) { q.dead = true; s.shieldUntil = now + SHIELD_MS; freeBurst(s, bx, q.y, false); freeBurst(s, bx - 6, q.y + 3, false); }   // on the fighter: the shield takes it, with a bigger flash
-      else if (q.y + DOT >= ground) { q.dead = true; carve(s, colAt(bx + 1, off), 2); freeBurst(s, bx, ground - 1, false); }
+      else if (q.y + DOT >= ground && !q.eye) { q.dead = true; carve(s, colAt(bx + 1, off), 2); freeBurst(s, bx, ground - 1, false); }   // (a moai's beam starts inside the moai, and flies up: it never hits the ground)
       else if (bx < -DOT || bx > W + DOT || q.y < -DOT) q.dead = true;
     }
     s.bb = s.bb.filter(q => !q.dead);
@@ -951,6 +1072,11 @@ const FV = (() => {
   function renderCruiserBolts(s) {
     for (const q of s.bb) {
       const l = Math.hypot(q.vx, q.vy) || 1, ux = q.vx / l, uy = q.vy / l;
+      if (q.eye) {   // a moai's beam: a cyan line 2 px thick with a white head, short at first, growing to its length
+        const n = Math.min(14, Math.round(q.age * IZ_BEAM_V));
+        for (let i = n; i >= 0; i--) { const f = 1 - i / 15; const bx = Math.round(q.x - ux * i), by = Math.round(q.y - uy * i), c = i < 2 ? rgb(255, 255, 255) : mix(MOAI_GLOW_TAIL, MOAI_GLOW, f); px(bx, by, c); px(bx, by + 1, c); }   // 2 px thick
+        continue;
+      }
       for (let i = 7; i >= 1; i--) { const f = 1 - i / 8, w = i < 3 ? 3 : 2; fillRect(Math.round(q.x - ux * i * 3.5) - 1, Math.round(q.y - uy * i * 3.5) - 1, w, w, rgb(Math.round(30 + 110 * f), Math.round(120 + 135 * f), Math.round(50 + 130 * f))); }   // a long tail fading into green
       dot(Math.trunc(q.x) - 1, Math.trunc(q.y) - 1, rgb(230, 255, 235));
       if (q.age < 0.12) for (const [dx, dy] of [[0, 0], [-DOT, 0], [DOT, 0], [0, -DOT], [0, DOT]]) dot(Math.round(q.ox) - 1 + dx, Math.round(q.oy) - 1 + dy, dx || dy ? rgb(120, 255, 150) : rgb(255, 255, 255));   // the muzzle flash
@@ -1054,6 +1180,16 @@ const FV = (() => {
           for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });   // stop: how near the fighter it runs before it stops; back: after the ground has carried it off to the left it runs back to the middle of the screen and waves again
         }
         s.citAcc = 5 + (nextRandom(s) % 50) / 10;
+      }
+    } else if (s.dz.ph === 2 && s.dz.kind) {   // on the moai island the islanders come out from behind a moai the same way and run after the fighter
+      s.citAcc -= dt;
+      if (s.citAcc <= 0) {
+        const z = s.dz, ok = z.items.filter(d => { const x = dzCx(z, d) + MOAI_W * DOT / 2; return d.moai && x > 110 && x < W - 20; });
+        if (ok.length && s.cit.length < 3) {   // three or four at a time, like the city's
+          const d = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 2, x0 = dzCx(z, d) + MOAI_W * DOT / 2 - PERSON_W / 2;
+          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });
+        }
+        s.citAcc = 4 + (nextRandom(s) % 40) / 10;
       }
     }
     for (const c of s.cit) {
@@ -1361,6 +1497,7 @@ const FV = (() => {
     s.evadeCur += (evadeTgt - s.evadeCur) * (1 - Math.exp(-dt / (evadeTgt ? 0.07 : 0.5)));
     const sy = Math.round(s.shipY + bobY(now) + s.evadeCur);
     updateCity(s, now, dt, sx, sy);
+    updateMoaiBeams(s, now, sx, sy);
     updateCruiser(s, now, dt, sx, sy);
 
     for (const m of s.m) {
@@ -1528,12 +1665,12 @@ const FV = (() => {
       if (st.near) { px(x + 1, y, c); px(x, y + 1, c); px(x + 1, y + 1, c); }
       for (let t = Math.round(s.mz.u * (st.near ? 10 : 4)); t > 0; t--) px(x + 1 + t, y, c);
     }
-    renderMoon(s);                                         // the moon over the desert
+    renderMoon(s, now);                                         // the moon over the desert
     renderCruiser(s, now);                                  // the cruiser: in the sky, behind everything but the stars
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
     renderDesert(s);                                       // the pyramids and the sphinx: behind the dunes
-    const du = s.dz.u, lit = du > 0 ? Array.from(s.lit, (c, k) => mix(c, SAND[k], du)) : s.lit;   // in the desert the terrain turns to sand
+    const du = s.dz.u, GND = s.dz.kind ? GRASS : SAND, lit = du > 0 ? Array.from(s.lit, (c, k) => mix(c, GND[k], du)) : s.lit;   // on the island, grass   // in the desert the terrain turns to sand
     for (let i = 0; i < COLS; i++) {
       const x0 = colX(i, off), h = mzHeight(s, s.h[i]);
       for (let dx = 0; dx < BAR_W; dx++) {
@@ -1571,7 +1708,7 @@ const FV = (() => {
         if (peak < h) peak = -1;
         for (let dx = 0; dx < BAR_W; dx++) {
           const x = x0 + dx;
-          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], mix(SAND[k], rgb(255, 255, 255), 0.45), du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too, paler than the dunes
+          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], mix(GND[k], rgb(255, 255, 255), 0.45), du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too, paler than the dunes
           if (peak >= 0) for (let k = peak; k < peak + SEG_H; k++) fb[(H - 1 - k) * W + x] = C.peak;
         }
       }

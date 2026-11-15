@@ -48,6 +48,8 @@ Meteor zone (trial): now and then the terrain sinks low and meteors stream from 
 
 Desert zone (trial): rarely the terrain becomes sand dunes under a full moon, and pyramids, a sphinx and a small camel caravan flow by. Add `?desert=now` to the address to see one soon after start, then every 30 s.
 
+Moai island (trial): the desert's twin, coming in the same rare slot by lot. Green grass, the sea under a setting sun, and moai on two stone platforms; on a beat a moai's eyes light up and it opens its mouth to shoot thin beams at the fighter (they only light its shield), while islanders run after the fighter and wave. Add `?island=now` to see one soon after start, then every 30 s.
+
 `Fn+M` cycles measure -> flight -> keyboard; the last mode is remembered (flight at first).
 
 </td>
