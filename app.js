@@ -671,15 +671,13 @@ const FV = (() => {
     "LLLLLLMMMMMMS..",
     "LLLLLLMMMMMMS.." ];
   const MOAI_W = 15, MOAI_H = MOAI.length;
-  // A moai turned the other way (to the right): the art mirrored, and its lit and side faces swapped, since the sun is still on the left.
-  const MOAI_R = MOAI.map(r => [...r].reverse().map(ch => ch === "L" ? "M" : ch === "M" ? "L" : ch).join(""));
   // When it shoots, the mouth opens (dark, with light inside) and the beams leave from it: the cells that change, as column, row, kind
-  // (0 dark, 1 the light inside), for a moai facing left; mirrored for one facing right.
+  // (0 dark, 1 the light inside).
   const MOAI_MOUTH = [[1, 13, 1], [2, 13, 1], [3, 13, 0], [4, 13, 0], [5, 13, 0], [1, 14, 0], [2, 14, 0], [3, 14, 0]];
   const MOAI_GUN = [1, 13], MOAI_FIRE_MS = 220, MOAI_OPEN_S = 0.7;   // where the beams leave; the wait from the eyes lighting to the shot; how long the mouth stays open
   const MOAI_COL = { H: rgb(226, 216, 196), L: rgb(186, 174, 156), M: rgb(122, 112, 102), S: rgb(78, 72, 66), D: rgb(30, 27, 26) };
   // two groups, five heads and three (ox in px from where the zone's first one enters)
-  const IZ_LAYOUT = [0, 57, 114, 171, 228, 340, 397, 454].map((ox, i) => ({ ox, moai: true, flip: i === 2 || i === 6 }));   // two of them look the other way
+  const IZ_LAYOUT = [0, 57, 114, 171, 228, 340, 397, 454].map(ox => ({ ox, moai: true }));
   const IZ_LEN = 454 + MOAI_W * DOT + 10;
   const IZ_BEAM_V = 150, IZ_BEAM_GAP_MS = 700;   // the eye beams: px/s, and the shortest time between two moai shooting
   const HORIZON = H - 38;   // the sea's horizon (px from the top), just above the tallest grass
@@ -721,8 +719,7 @@ const FV = (() => {
     z.glow = Math.max(0, z.glow - dt * 2.5);
     for (const d of z.items) if (d.moai) { d.glow = Math.max(0, d.glow - dt * 1.5); d.open = Math.max(0, d.open - dt); }
   }
-  // The moai's beams: on a beat, now and then, a moai that faces the fighter (one turned left and to its right, or one turned right that
-  // it has passed) lights the hollow under its brow, then opens its mouth and shoots two thin beams from it at the fighter. They fly like
+  // The moai's beams: on a beat, now and then, a moai in front of the fighter (to its right, on the screen) lights the hollow under its brow, then opens its mouth and shoots two thin beams from it at the fighter. They fly like
   // the cruiser's bolts (s.bb): straight, and a hit only lights the shield.
   const moaiTop = () => H - GROUND - MOAI_H * DOT;   // a moai's top (px): the heads stand on the ground
   function updateMoaiBeams(s, now, sx, sy) {
@@ -730,14 +727,14 @@ const FV = (() => {
     for (const d of z.items) {   // a shot that is due: from the open mouth
       if (!d.fireAt || now < d.fireAt) continue;
       d.fireAt = 0;
-      const gx = dzCx(z, d) + (d.flip ? MOAI_W - 1 - MOAI_GUN[0] : MOAI_GUN[0]) * DOT + 1, gy = moaiTop() + MOAI_GUN[1] * DOT + 1;
+      const gx = dzCx(z, d) + MOAI_GUN[0] * DOT + 1, gy = moaiTop() + MOAI_GUN[1] * DOT + 1;
       for (const k of [-1, 1]) {
         const tx = sx + SHIP_W / 2 + k * 6 + (nextRandom(s) % 9) - 4, ty = sy + SHIP_H / 2 + k * 4 + (nextRandom(s) % 9) - 4, dd = Math.hypot(tx - gx, ty - gy) || 1;
         s.bb.push({ x: gx, y: gy, ox: gx, oy: gy, vx: (tx - gx) / dd * IZ_BEAM_V, vy: (ty - gy) / dd * IZ_BEAM_V, age: 0, eye: true });
       }
     }
     if (z.ph !== 2 || z.beatAt !== now || now < z.nextBeam || s.bb.length > 6) return;
-    const ready = z.items.filter(d => { const x = dzCx(z, d); return d.moai && (d.flip ? x > 0 && x + MOAI_W * DOT < sx - 10 : x > sx + SHIP_W + 30 && x < W - MOAI_W * DOT); });
+    const ready = z.items.filter(d => { const x = dzCx(z, d); return d.moai && x > sx + SHIP_W + 30 && x < W - MOAI_W * DOT; });
     if (!ready.length) return;
     const d = ready[nextRandom(s) % ready.length];
     d.glow = 1; d.open = MOAI_OPEN_S; d.fireAt = now + MOAI_FIRE_MS;
@@ -816,14 +813,14 @@ const FV = (() => {
     const z = s.dz, top = moaiTop();
     for (const d of z.items) {
       const cx = dzCx(z, d); if (cx > W || cx < -MOAI_W * DOT) continue;
-      const art = d.flip ? MOAI_R : MOAI, eye = mix(MOAI_COL.D, rgb(120, 255, 255), d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
+      const eye = mix(MOAI_COL.D, rgb(120, 255, 255), d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
       for (let r = 0; r < MOAI_H; r++) for (let c = 0; c < MOAI_W; c++) {
-        const ch = art[r][c]; if (ch === ".") continue;
+        const ch = MOAI[r][c]; if (ch === ".") continue;
         dot(cx + c * DOT, top + r * DOT, ch === "E" ? eye : MOAI_COL[ch]);
       }
       if (d.open > 0) {
         const inside = (Math.floor(now / 60) & 1) ? rgb(255, 255, 255) : rgb(120, 255, 255);
-        for (const [c, r, k] of MOAI_MOUTH) dot(cx + (d.flip ? MOAI_W - 1 - c : c) * DOT, top + r * DOT, k ? inside : MOAI_COL.D);
+        for (const [c, r, k] of MOAI_MOUTH) dot(cx + c * DOT, top + r * DOT, k ? inside : MOAI_COL.D);
       }
     }
   }
