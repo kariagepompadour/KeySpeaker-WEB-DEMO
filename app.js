@@ -142,11 +142,13 @@ const FV = (() => {
     k.t += dt;
     let evadeTgt = 0;
     // it appears only while music is playing (3 s of sound; a gap of up to 2 s between notes or songs does not count as silence)
+    // and never in the desert or on the moai island (the zone holds k.nextMs back when it starts, but going back to this screen makes a new
+    // monster state while a zone is still running, so it is checked here too)
     if (s.prevDb > DB_SILENT) { if (!k.musicSince) k.musicSince = now; k.lastMusic = now; }
     else if (now - (k.lastMusic || 0) > 2000) k.musicSince = 0;
     const musicOk = !!k.musicSince && now - k.musicSince >= 3000;
     if (k.ph === K_IDLE) {
-      if (musicOk && !s.cruiser && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
+      if (musicOk && !s.cruiser && !s.dz.ph && now - k.nextMs >= 0) { k.ph = K_WALK; k.t = 0; k.x = W + 4; k.face = "calm"; k.chase = nextRandom(s) % 100 < 40; k.pal = pickPal(s); k.tries = 0; k.nextAct = 0; k.threatDone = false;
         // Every visit plays out differently: how many times it may reach (1 to 3), whether it first makes itself big, and now and then
         // it only bluffs (the display, no reach at all).
         { const r = nextRandom(s) % 100; k.maxTries = r < 35 ? 1 : r < 75 ? 2 : 3; }
