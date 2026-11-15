@@ -671,9 +671,9 @@ const FV = (() => {
     "LLLLLLMMMMMMS..",
     "LLLLLLMMMMMMS.." ];
   const MOAI_W = 15, MOAI_H = MOAI.length;
-  // When it shoots, the mouth opens (dark, with light inside) and the beams leave from it: the cells that change, as column, row, kind
-  // (0 dark, 1 the light inside).
-  const MOAI_MOUTH = [[1, 13, 1], [2, 13, 1], [3, 13, 0], [4, 13, 0], [5, 13, 0], [1, 14, 0], [2, 14, 0], [3, 14, 0]];
+  // When it shoots, the jaw drops: rows 12-15 become an open mouth, two rows deep, with light flickering inside (K), the upper lip
+  // above it and the lower lip pushed down below it. The beams leave from it.
+  const MOAI_OPEN = MOAI.slice(0, 12).concat([".HLLLLSMMMMS...", ".KKDDDSMMMMS...", ".KKDDDSMMMMS...", ".HHLLLSMMMMS..."], MOAI.slice(16));
   const MOAI_GUN = [1, 13], MOAI_FIRE_MS = 220, MOAI_OPEN_S = 0.7;   // where the beams leave; the wait from the eyes lighting to the shot; how long the mouth stays open
   const MOAI_COL = { H: rgb(226, 216, 196), L: rgb(186, 174, 156), M: rgb(122, 112, 102), S: rgb(78, 72, 66), D: rgb(30, 27, 26) };
   // two groups, five heads and three (ox in px from where the zone's first one enters)
@@ -814,13 +814,10 @@ const FV = (() => {
     for (const d of z.items) {
       const cx = dzCx(z, d); if (cx > W || cx < -MOAI_W * DOT) continue;
       const eye = mix(MOAI_COL.D, rgb(120, 255, 255), d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
+      const art = d.open > 0 ? MOAI_OPEN : MOAI, inside = (Math.floor(now / 60) & 1) ? rgb(255, 255, 255) : rgb(120, 255, 255);
       for (let r = 0; r < MOAI_H; r++) for (let c = 0; c < MOAI_W; c++) {
-        const ch = MOAI[r][c]; if (ch === ".") continue;
-        dot(cx + c * DOT, top + r * DOT, ch === "E" ? eye : MOAI_COL[ch]);
-      }
-      if (d.open > 0) {
-        const inside = (Math.floor(now / 60) & 1) ? rgb(255, 255, 255) : rgb(120, 255, 255);
-        for (const [c, r, k] of MOAI_MOUTH) dot(cx + c * DOT, top + r * DOT, k ? inside : MOAI_COL.D);
+        const ch = art[r][c]; if (ch === ".") continue;
+        dot(cx + c * DOT, top + r * DOT, ch === "E" ? eye : ch === "K" ? inside : MOAI_COL[ch]);
       }
     }
   }
