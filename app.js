@@ -505,7 +505,7 @@ const FV = (() => {
   const mzTop = () => TOP + 6, mzBottom = () => H - MZ_SEG * SEG_PITCH - SHIP_H - 6;
   const mzPath = (s, ms) => { const t = ms * 0.001 + s.mz.ph0, mid = (mzTop() + mzBottom()) / 2, a = (mzBottom() - mzTop()) / 2;
     return mid + a * (0.62 * Math.sin(t * 1.1) + 0.38 * Math.sin(t * 2.3 + 1)); };
-  const mzHeight = (s, h, eq) => { let u = s.mz.u, seg = MZ_SEG; if (s.dz.u > u) { u = s.dz.u; seg = eq ? DZ_SEG * NSEG / EQ_NSEG : DZ_SEG; }   // the meteor zone's low terrain, or the desert's dunes (the equalizer as tall as the dunes)
+  const mzHeight = (s, h, eq) => { let u = s.mz.u, seg = MZ_SEG; if (s.dz.u > u) { u = s.dz.u; const ds = DZ_SEG; seg = eq ? ds * NSEG / EQ_NSEG : ds; if (s.dz.kind === 2) seg = NSEG; }   // in the jungle the mountains keep their full height (seg = NSEG: no squashing)   // the meteor zone's low terrain, or the desert's dunes (the equalizer as tall as the dunes)
     return u > 0 ? Math.max(GROUND, Math.round(h * (1 - u * (1 - seg / NSEG)) / SEG_PITCH) * SEG_PITCH) : h; };
   function spawnMeteor(s, now, sx, size) {
     if (s.met.length >= MZ_MAX) return;
@@ -593,7 +593,8 @@ const FV = (() => {
   const DZ_IN_S = 2, DZ_OUT_S = 2, DZ_FIRST_MS = 300000, DZ_MS_MIN = 480000, DZ_MS_MAX = 900000, DZ_SEG = 7;
   const desertNow = () => typeof location !== "undefined" && /desert=now/.test(location.search);
   const islandNow = () => typeof location !== "undefined" && /island=now/.test(location.search);
-  const zoneNow = () => desertNow() || islandNow();
+  const jungleNow = () => typeof location !== "undefined" && /jungle=now/.test(location.search);
+  const zoneNow = () => desertNow() || islandNow() || jungleNow();
   // the sphinx, lying with its paws to the left and its face turned toward us (L moonlit stone, S shade, D dark lines, E the two eyes,
   // N the striped headdress falling on both sides of the face: gold and blue rows)
   const SPHINX = [
@@ -693,6 +694,104 @@ const FV = (() => {
     }
     return a;
   })();
+  /* ---- JUNGLE RUINS (trial): the desert zone's third face, in the same rare slot (by lot: the desert, the moai island or the jungle). A moonlit jungle around the
+     stepped Maya pyramids of an old Mesoamerican world (an invented one, not a real site), drawn in 3 x 3 dots from a small character sheet: each has a temple on top.
+     The terrain is the same volume mountains as ever, at their full height, coloured as a jungle (brown earth at the foot, deep green, green, then yellow-green at the
+     tops); no equalizer in this zone. Their sizes (2 to 6 tiers) are fixed in the layout, a mix of big and small like the Egyptian ones, and do not follow the music; on a beat
+     the temples glow a little. People come out from behind a pyramid, run after the fighter and wave, as on the moai island. Behind: a white moon and two ranges of sharp deep-green
+     peaks, slower than the ground. On the ground: torches with a flickering flame, and a few fireflies. No monster, no city, no bombs, as in the desert. No full-screen
+     background buffer: one small sheet reused at different places. ?jungle=now: one soon after start, then one every 4 s. ---- */
+  const JG_MOON_TONES = [[255, 255, 255], [238, 242, 248], [210, 218, 230], [168, 178, 196]];   // the same four tones as the desert's moon, but white
+  const PYR_W = 29, PYR_MIN = 2, PYR_MAX = 6;   // dots wide in all sizes (so a pyramid keeps its middle as it grows); fewest and most tiers
+  const PYR_N = (() => {   // PYR_N[n]: the pyramid with n tiers (2 rows each): its base is wider by 2 dots each side for each tier, so it grows in width and in height together
+    const out = [], mid = (PYR_W - 1) / 2;
+    for (let n = PYR_MIN; n <= PYR_MAX; n++) {
+      const rows = [".".repeat(mid - 3) + "RRRRRRR" + ".".repeat(mid - 3)];
+      for (let r = 0; r < 3; r++) { let t = ""; for (let c = 0; c < PYR_W; c++) { const dx = c - mid, a = Math.abs(dx); t += a > 2 ? "." : (r > 0 && a === 0) ? "D" : dx < 0 ? "S" : "L"; } rows.push(t); }
+      let k = 0;
+      for (let tier = 0; tier < n; tier++) for (let r = 0; r < 2; r++, k++) {
+        const hw = 4 + 2 * tier; let t = "";
+        for (let c = 0; c < PYR_W; c++) { const dx = c - mid, a = Math.abs(dx); t += a > hw ? "." : a <= 1 ? (k & 1 ? "t" : "T") : dx === hw ? "E" : dx < 0 ? (k & 1 ? "s" : "S") : (k & 1 ? "l" : "L"); }
+        rows.push(t);
+      }
+      out[n] = { w: PYR_W, rows, h: rows.length };
+    }
+    return out;
+  })();
+  const pyrOf = (d) => PYR_N[Math.max(PYR_MIN, Math.min(PYR_MAX, Math.round(d.tier)))];   // the pyramid's sheet for its size right now
+  const JG_SPR = { pyr: { w: PYR_W, rows: PYR_N[3].rows } };   // (pyr: the sheet only gives its width here; its size comes from pyrOf)   // (pyr: the sheet only gives its width here; its size comes from pyrOf)
+  for (const k in JG_SPR) JG_SPR[k].h = JG_SPR[k].rows.length;
+  const JG_COL = {
+    pyr: { L: rgb(156, 168, 188), l: rgb(144, 156, 176), S: rgb(102, 114, 136), s: rgb(94, 106, 128), T: rgb(192, 202, 218), t: rgb(154, 166, 186), E: rgb(210, 218, 232), D: rgb(20, 24, 34), R: rgb(124, 136, 158) },
+  };
+  // The jungle's equalizer: bars in front of the mountains, in teal: deep teal at the foot, turquoise, then mint (like the fireflies), so they stand apart from the green mountains.
+  const JG_EQ = (() => {
+    const stops = [[8, 72, 88], [22, 170, 172], [110, 238, 218], [212, 255, 246]], a = new Uint32Array(MAX_BAR);
+    for (let k = 0; k < MAX_BAR; k++) { const t = Math.min(1, k / 44) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(t)), u = t - i, A = stops[i], B = stops[i + 1]; a[k] = rgb(Math.round(A[0] + (B[0] - A[0]) * u), Math.round(A[1] + (B[1] - A[1]) * u), Math.round(A[2] + (B[2] - A[2]) * u)); }
+    return a;
+  })();
+  const jgEqColour = (own, k, du) => mix(own, JG_EQ[k], du);   // (own: the bar's colour on every other screen)
+  const JG_GLOW = rgb(170, 255, 210);   // the glow of a temple on a beat
+  // the zone's layout, left to right: ox from where the zone's first one enters (px). Few of each, so the screen stays readable.
+  const JG_LAYOUT = [{ ox: 0, k: "pyr", tier: 5 }, { ox: 124, k: "torch" }, { ox: 160, k: "pyr", tier: 3 }, { ox: 284, k: "torch" }, { ox: 320, k: "pyr", tier: 6 }, { ox: 444, k: "torch" }, { ox: 480, k: "pyr", tier: 2 }];   // tier: a pyramid's size, fixed in the layout like the Egyptian ones (not tied to the music)
+  const JG_LEN = 480 + PYR_W * DOT + 10;
+  const zoneLen = (kind) => kind === 2 ? JG_LEN : kind ? IZ_LEN : DZ_LEN;
+  const JUNGLE = (() => {   // the ground and the equalizer: brown earth at the foot, then deep green, green, and yellow-green at the tops
+    const a = new Uint32Array(MAX_BAR);
+    for (let k = 0; k < MAX_BAR; k++) {
+      const sg = Math.floor(k / SEG_PITCH);
+      a[k] = k % SEG_PITCH >= SEG_H ? BLACK : sg === 0 ? rgb(112, 76, 44) : sg <= 5 ? rgb(14, 92, 48) : sg <= 11 ? rgb(40, 156, 58) : rgb(158, 218, 72);
+    }
+    return a;
+  })();
+  const jgColumnH = (sp, c) => { let r = 0; while (r < sp.h && sp.rows[r][c] === ".") r++; return (sp.h - r) * DOT; };   // how tall a sheet stands in dot column c (px)
+  // The backmost layer: two ranges of sharp, uneven peaks, the far one deep green and the near one darker with a ragged canopy edge, each with a lighter rim, drifting at
+  // different slow speeds (parallax). Not round bumps: those looked like a cartoon shooter's backdrop.
+  const jgRidge = (wx, cell, hMin, hMax, slope, seed) => {   // the height (px) of a ridge of peaks at world x
+    const c0 = Math.floor(wx / cell); let best = 0;
+    for (let c = c0 - 1; c <= c0 + 1; c++) {
+      const r = Math.imul(c + seed, 2654435761) >>> 0, pk = c * cell + ((r >>> 8) % cell), ph = hMin + ((r >>> 16) % (hMax - hMin)), v = ph - Math.abs(wx - pk) * slope;
+      if (v > best) best = v;
+    }
+    return best;
+  };
+  const jgFarRange = (s) => {
+    const z = s.dz, u = z.u;
+    const layers = [{ sc: z.x * 0.2, cell: 44, lo: 40, hi: 74, sl: 1.15, seed: 7, body: rgb(10, 62, 42), rim: rgb(60, 142, 98), rag: false },
+                    { sc: z.x * 0.45, cell: 30, lo: 26, hi: 52, sl: 1.45, seed: 31, body: rgb(5, 38, 30), rim: rgb(84, 190, 120), rag: true }];
+    for (const L of layers) {
+      const body = mix(BLACK, L.body, u), rim = mix(BLACK, L.rim, u);
+      for (let x = 0; x < W; x++) {
+        let top = Math.round(jgRidge(x - L.sc, L.cell, L.lo, L.hi, L.sl, L.seed));
+        if (L.rag) top += (Math.imul(x, 2654435761) >>> 30) & 1;   // a ragged canopy edge, one or two px
+        for (let k = 0; k < top; k++) fb[(H - 1 - k) * W + x] = k >= top - 1 ? rim : body;
+      }
+    }
+  };
+  function jgDraw(sp, cols, cx, gy) { for (let r = 0; r < sp.h; r++) for (let c = 0; c < sp.w; c++) { const ch = sp.rows[r][c]; if (ch !== "." && cols[ch]) dot(cx + c * DOT, gy - (sp.h - r) * DOT, cols[ch]); } }
+  function renderJungle(s, now) {   // in front of the ground: the heads, torches and fireflies
+    const z = s.dz, gy = H - GROUND, g = Math.min(1, z.glow);
+    const pcols = { ...JG_COL.pyr, R: mix(JG_COL.pyr.R, JG_GLOW, g * 0.85), D: mix(JG_COL.pyr.D, rgb(60, 200, 150), g * 0.7) };   // on a beat the temple's roof and doorway glow a little
+    for (const d of z.items) {
+      const cx = dzCx(z, d);
+      if (d.k === "pyr") {
+        if (cx > W || cx < -PYR_W * DOT) continue;
+        jgDraw(pyrOf(d), pcols, cx, gy);
+      }
+      else if (d.k === "torch") {   // a post with a flame that flickers, and a small warm light on the ground
+        if (cx > W || cx < -DOT) continue;
+        const f = Math.floor(now / 110 + cx) & 1;
+        for (let r = 0; r < 3; r++) dot(cx, gy - (r + 1) * DOT, rgb(120, 84, 48));
+        dot(cx, gy - 4 * DOT, f ? rgb(255, 170, 40) : rgb(255, 226, 110));
+        addDot(cx, gy - 5 * DOT, f ? 60 : 36, f ? 30 : 20, 0);
+      }
+    }
+    for (let i = 0; i < 7; i++) {   // fireflies: slow, blinking
+      if (((Math.floor(now / 330) + i * 3) & 3) === 0) continue;
+      const fx = (((i * 61 - z.x * 0.5) % W) + W) % W + 6 * Math.sin(now / 900 + i * 2.1), fy = 44 + ((i * 17) % 46) + 5 * Math.sin(now / 700 + i);
+      px(Math.round(fx), Math.round(fy), rgb(200, 255, 100)); px(Math.round(fx) + 1, Math.round(fy), rgb(120, 200, 60));
+    }
+  }
   const dzCx = (z, d) => DOT * Math.round((z.x + d.ox) / DOT);
   function updateDesert(s, now, dt) {
     const z = s.dz, k = s.k;
@@ -700,9 +799,9 @@ const FV = (() => {
     if (z.ph === 0) {
       if (now - z.nextMs >= 0 && !s.mz.ph && k.ph === K_IDLE && !s.city && !s.cruiser && (zoneNow() || (k.musicSince && now - k.musicSince >= 3000))) {
         z.ph = 1; z.t = 0; z.x = W + 40; z.glow = 0; z.walked = 0; z.nextBeam = 0;
-        z.kind = desertNow() ? 0 : islandNow() ? 1 : nextRandom(s) & 1;   // the desert or the moai island, by lot
-        z.items = z.kind ? IZ_LAYOUT.map(d => ({ ...d, glow: 0, open: 0, fireAt: 0 })) : DZ_LAYOUT.map(d => ({ ...d, hd: d.max || 0 }));
-        const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + (z.kind ? IZ_LEN : DZ_LEN)) / SCROLL_PX_S * 1000;
+        z.kind = desertNow() ? 0 : islandNow() ? 1 : jungleNow() ? 2 : nextRandom(s) % 3;   // the desert, the moai island or the jungle ruins, by lot
+        z.items = z.kind === 2 ? JG_LAYOUT.map(d => ({ ...d })) : z.kind ? IZ_LAYOUT.map(d => ({ ...d, glow: 0, open: 0, fireAt: 0 })) : DZ_LAYOUT.map(d => ({ ...d, hd: d.max || 0 }));
+        const dur = (DZ_IN_S + DZ_OUT_S) * 1000 + (W + 40 + zoneLen(z.kind)) / SCROLL_PX_S * 1000;
         k.nextMs = Math.max(k.nextMs, now + dur + 8000);             // no monster while it lasts
         s.mz.nextMs = Math.max(s.mz.nextMs, now + dur + 30000);      // nor a meteor zone right after it
         s.nextCityMs = Math.max(s.nextCityMs, now + dur + 8000);
@@ -714,10 +813,10 @@ const FV = (() => {
     z.x -= SCROLL_PX_S * dt;
     z.walked += CARAVAN_WALK * dt;
     if (z.ph === 1) { z.u = Math.min(1, z.t / DZ_IN_S); if (z.t >= DZ_IN_S) { z.ph = 2; z.t = 0; } }
-    else if (z.ph === 2) { if (z.x + (z.kind ? IZ_LEN : DZ_LEN) < 0) { z.ph = 3; z.t = 0; } }
+    else if (z.ph === 2) { if (z.x + zoneLen(z.kind) < 0) { z.ph = 3; z.t = 0; } }
     else {
       z.u = Math.max(0, 1 - z.t / DZ_OUT_S);
-      if (z.t >= DZ_OUT_S) { z.ph = 0; z.u = 0; z.items = []; z.nextMs = now + (zoneNow() ? 30000 : DZ_MS_MIN + nextRandom(s) % (DZ_MS_MAX - DZ_MS_MIN)); return; }
+      if (z.t >= DZ_OUT_S) { z.ph = 0; z.u = 0; z.items = []; z.nextMs = now + (jungleNow() ? 4000 : zoneNow() ? 30000 : DZ_MS_MIN + nextRandom(s) % (DZ_MS_MAX - DZ_MS_MIN)); return; }
     }
     if (s.beat) { z.glow = 1; z.beatAt = now; }   // the moai's beams use it later in the frame, after the enemies have taken s.beat
     z.glow = Math.max(0, z.glow - dt * 2.5);
@@ -727,7 +826,7 @@ const FV = (() => {
   // the cruiser's bolts (s.bb): straight, and a hit only lights the shield.
   const moaiTop = () => H - GROUND - (AHU_H + MOAI_H) * DOT;   // a moai's top (px): on its ahu
   function updateMoaiBeams(s, now, sx, sy) {
-    const z = s.dz; if (!z.kind || !z.ph) return;
+    const z = s.dz; if (z.kind !== 1 || !z.ph) return;
     for (const d of z.items) {   // a shot that is due: from the open mouth
       if (!d.fireAt || now < d.fireAt) continue;
       d.fireAt = 0;
@@ -748,6 +847,14 @@ const FV = (() => {
   function dzHeightAt(s, x) {   // how high the monuments stand at x (from the bottom of the screen, like the terrain), so the fighter flies over them
     const z = s.dz; if (!z.ph) return 0;
     let h = 0;
+    if (z.kind === 2) {   // the jungle ruins: pyramids (their steps), heads, palms and leaves
+      for (const d of z.items) {
+        const sp = d.k === "pyr" ? pyrOf(d) : JG_SPR[d.k]; if (!sp) continue;
+        const cx = dzCx(z, d); if (x < cx || x >= cx + sp.w * DOT) continue;
+        h = Math.max(h, GROUND + jgColumnH(sp, Math.floor((x - cx) / DOT)));
+      }
+      return h;
+    }
     if (z.kind) {   // the moai island: the moai on their ahu
       for (const d of z.items) { const cx = dzCx(z, d); if (x >= cx && x < cx + MOAI_W * DOT) h = Math.max(h, H - moaiTop()); }
       for (const [a, b] of IZ_AHU) if (x >= z.x + a && x < z.x + b) h = Math.max(h, GROUND + AHU_H * DOT);
@@ -796,10 +903,10 @@ const FV = (() => {
     }
   }
   function renderMoon(s, now) {
-    if (s.dz.kind) { if (s.dz.u > 0) renderSunset(s, now); return; }   // the moai island: an evening sky instead
+    if (s.dz.kind === 1) { if (s.dz.u > 0) renderSunset(s, now); return; }   // the moai island: an evening sky instead
     const u = s.dz.u; if (u <= 0) return;
     const cx = 192, cy = 30 - Math.round(8 * (1 - u)), R = MOON_R;
-    const tone = MOON_TONES.map(([r, g, b]) => mix(BLACK, rgb(r, g, b), u));
+    const tone = (s.dz.kind === 2 ? JG_MOON_TONES : MOON_TONES).map(([r, g, b]) => mix(BLACK, rgb(r, g, b), u));   // the jungle's moon is white
     const L = [0.55, -0.55, 0.63];   // toward the light: right, up, toward us
     for (let dy = -R; dy < R; dy++) for (let dx = -R; dx < R; dx++) {
       const x = dx + 0.5, y = dy + 0.5;   // the pixel's middle: the disc is symmetric
@@ -813,6 +920,7 @@ const FV = (() => {
       }
       px(cx + dx, cy + dy, tone[t]);
     }
+    if (s.dz.kind === 2) jgFarRange(s);   // the jungle: the far mountain ranges under the moon
   }
   function renderMoai(s, now) {   // the two ahu, then the moai on them; the eyes glow on a beat, fully while the mouth is open to shoot
     const z = s.dz, top = moaiTop(), gy = H - GROUND, stone = rgb(70, 64, 60), stone2 = rgb(96, 88, 82);
@@ -830,6 +938,7 @@ const FV = (() => {
   }
   function renderSphinx(s, now) {   // in front of the dunes, so they are seen whole: the sphinx, a person waving to the fighter, and the caravan
     const z = s.dz; if (!z.ph) return;
+    if (z.kind === 2) { renderJungle(s, now); return; }
     if (z.kind) { renderMoai(s, now); return; }
     const gy = H - GROUND, eye = mix(rgb(40, 28, 20), rgb(120, 255, 255), z.glow);
     const col = { L: rgb(232, 194, 124), S: rgb(132, 94, 54), D: rgb(70, 48, 30), E: eye };
@@ -871,7 +980,8 @@ const FV = (() => {
     }
   }
   function renderDesert(s) {   // behind the dunes: the pyramids
-    const z = s.dz; if (!z.ph || z.kind) return;
+    const z = s.dz; if (!z.ph) return;
+    if (z.kind) return;
     const gy = H - GROUND, g = z.glow;
     const lit = rgb(232, 194, 124), lit2 = rgb(214, 174, 106), shade = rgb(132, 94, 54), shade2 = rgb(116, 82, 46), edge = rgb(252, 226, 168);
     const cap = mix(rgb(220, 170, 40), rgb(255, 250, 190), g);
@@ -1181,12 +1291,13 @@ const FV = (() => {
         }
         s.citAcc = 5 + (nextRandom(s) % 50) / 10;
       }
-    } else if (s.dz.ph === 2 && s.dz.kind) {   // on the moai island the islanders come out from behind a moai the same way and run after the fighter
+    } else if (s.dz.ph === 2 && s.dz.kind >= 1) {   // on the moai island the islanders come out from behind a moai the same way and run after the fighter; in the jungle, from a stone head or a pyramid
       s.citAcc -= dt;
       if (s.citAcc <= 0) {
-        const z = s.dz, ok = z.items.filter(d => { const x = dzCx(z, d) + MOAI_W * DOT / 2; return d.moai && x > 110 && x < W - 20; });
+        const z = s.dz, half = (d) => d.moai ? MOAI_W * DOT / 2 : JG_SPR[d.k] ? JG_SPR[d.k].w * DOT / 2 : 0, src = (d) => z.kind === 2 ? d.k === "pyr" : d.moai;
+        const ok = z.items.filter(d => { const x = dzCx(z, d) + half(d); return src(d) && x > 110 && x < W - 20; });
         if (ok.length && s.cit.length < 3) {   // three or four at a time, like the city's
-          const d = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 2, x0 = dzCx(z, d) + MOAI_W * DOT / 2 - PERSON_W / 2;
+          const d = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 2, x0 = dzCx(z, d) + half(d) - PERSON_W / 2;
           for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });
         }
         s.citAcc = 4 + (nextRandom(s) % 40) / 10;
@@ -1670,7 +1781,7 @@ const FV = (() => {
     if (!LIGHTS_FRONT) renderLights(s, now);               // the searchlights: behind the monsters and the terrain
     renderKong(s, now, false);                             // the body: behind the terrain
     renderDesert(s);                                       // the pyramids and the sphinx: behind the dunes
-    const du = s.dz.u, GND = s.dz.kind ? GRASS : SAND, lit = du > 0 ? Array.from(s.lit, (c, k) => mix(c, GND[k], du)) : s.lit;   // on the island, grass   // in the desert the terrain turns to sand
+    const du = s.dz.u, GND = s.dz.kind === 2 ? JUNGLE : s.dz.kind ? GRASS : SAND, lit = du > 0 ? Array.from(s.lit, (c, k) => mix(c, GND[k], du)) : s.lit;   // on the island, grass   // in the desert the terrain turns to sand
     for (let i = 0; i < COLS; i++) {
       const x0 = colX(i, off), h = mzHeight(s, s.h[i]);
       for (let dx = 0; dx < BAR_W; dx++) {
@@ -1708,7 +1819,7 @@ const FV = (() => {
         if (peak < h) peak = -1;
         for (let dx = 0; dx < BAR_W; dx++) {
           const x = x0 + dx;
-          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? mix(s.eqCol[s.pattern - 1][j], mix(GND[k], rgb(255, 255, 255), 0.45), du) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too, paler than the dunes
+          for (let k = 0; k < h; k++) fb[(H - 1 - k) * W + x] = k % SEG_PITCH < SEG_H ? (du > 0 ? (s.dz.kind === 2 ? jgEqColour(s.eqCol[s.pattern - 1][j], k, du) : mix(s.eqCol[s.pattern - 1][j], mix(GND[k], rgb(255, 255, 255), 0.45), du)) : s.eqCol[s.pattern - 1][j]) : BLACK;   // in the desert the EQ turns to sand too, paler than the dunes
           if (peak >= 0) for (let k = peak; k < peak + SEG_H; k++) fb[(H - 1 - k) * W + x] = C.peak;
         }
       }
