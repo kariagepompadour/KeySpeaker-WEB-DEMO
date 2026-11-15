@@ -1181,6 +1181,16 @@ const FV = (() => {
         }
         s.citAcc = 5 + (nextRandom(s) % 50) / 10;
       }
+    } else if (s.dz.ph === 2 && s.dz.kind) {   // on the moai island the islanders come out from behind a moai the same way and run after the fighter
+      s.citAcc -= dt;
+      if (s.citAcc <= 0) {
+        const z = s.dz, ok = z.items.filter(d => { const x = dzCx(z, d) + MOAI_W * DOT / 2; return d.moai && x > 110 && x < W - 20; });
+        if (ok.length && s.cit.length < 3) {   // three or four at a time, like the city's
+          const d = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 2, x0 = dzCx(z, d) + MOAI_W * DOT / 2 - PERSON_W / 2;
+          for (let k = 0; k < n; k++) s.cit.push({ x: x0, mode: "wait", t: -k * 0.13, ph: nextRandom(s) % 7, stop: 22 + nextRandom(s) % 70, back: nextRandom(s) % 100 < 35, backTo: 100 + nextRandom(s) % 60, x0 });
+        }
+        s.citAcc = 4 + (nextRandom(s) % 40) / 10;
+      }
     }
     for (const c of s.cit) {
       c.t += dt;
