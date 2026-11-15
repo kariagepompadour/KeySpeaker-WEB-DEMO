@@ -677,6 +677,7 @@ const FV = (() => {
   // The beams leave from it.
   const MOAI_OPEN = MOAI.slice(0, 11).concat(["SSLDKKKDLL", "SSLDDDDDLL", ".SLLSSLLL."], MOAI.slice(14));
   const MOAI_GUN = [5, 11], MOAI_FIRE_MS = 220, MOAI_OPEN_S = 0.7;   // where the beams leave; the wait from the eyes lighting to the shot; how long the mouth stays open
+  const MOAI_GLOW = rgb(120, 255, 255), MOAI_GLOW_TAIL = rgb(60, 200, 255);   // the eyes, the mouth's light and the beams: cyan (red and yellow looked like holes showing the sunset through the stone)
   const MOAI_COL = { L: rgb(150, 140, 128), H: rgb(196, 186, 170), S: rgb(92, 84, 78), D: rgb(38, 34, 32) };
   // two ahu: five moai, then three (ox in px from where the zone's first one enters)
   const IZ_LAYOUT = [0, 42, 84, 126, 168, 300, 342, 384].map(ox => ({ ox, moai: true }));
@@ -819,8 +820,8 @@ const FV = (() => {
       dot(x, gy - (r + 1) * DOT, ((Math.floor((x - z.x) / DOT) + r) % 3) ? stone : stone2);   // laid stones
     for (const d of z.items) {
       const cx = dzCx(z, d); if (cx > W || cx < -MOAI_W * DOT) continue;
-      const eye = mix(MOAI_COL.D, rgb(120, 255, 255), d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
-      const art = d.open > 0 ? MOAI_OPEN : MOAI, inside = (Math.floor(now / 60) & 1) ? rgb(255, 255, 255) : rgb(120, 255, 255);
+      const eye = mix(MOAI_COL.D, MOAI_GLOW, d.open > 0 ? 1 : Math.max(z.glow * 0.6, d.glow));   // full while the mouth is open
+      const art = d.open > 0 ? MOAI_OPEN : MOAI, inside = (Math.floor(now / 60) & 1) ? rgb(255, 255, 255) : MOAI_GLOW;
       for (let r = 0; r < MOAI_H; r++) for (let c = 0; c < MOAI_W; c++) {
         const ch = art[r][c]; if (ch === ".") continue;
         dot(cx + c * DOT, top + r * DOT, ch === "E" ? eye : ch === "K" ? inside : MOAI_COL[ch]);
@@ -1071,9 +1072,9 @@ const FV = (() => {
   function renderCruiserBolts(s) {
     for (const q of s.bb) {
       const l = Math.hypot(q.vx, q.vy) || 1, ux = q.vx / l, uy = q.vy / l;
-      if (q.eye) {   // a moai's eye beam: a cyan line 2 px thick with a white head, short at first, growing to its length
+      if (q.eye) {   // a moai's beam: a cyan line 2 px thick with a white head, short at first, growing to its length
         const n = Math.min(14, Math.round(q.age * IZ_BEAM_V));
-        for (let i = n; i >= 0; i--) { const f = 1 - i / 15; const bx = Math.round(q.x - ux * i), by = Math.round(q.y - uy * i), c = i < 2 ? rgb(255, 255, 255) : rgb(Math.round(60 + 120 * f), Math.round(200 + 55 * f), 255); px(bx, by, c); px(bx, by + 1, c); }   // 2 px thick
+        for (let i = n; i >= 0; i--) { const f = 1 - i / 15; const bx = Math.round(q.x - ux * i), by = Math.round(q.y - uy * i), c = i < 2 ? rgb(255, 255, 255) : mix(MOAI_GLOW_TAIL, MOAI_GLOW, f); px(bx, by, c); px(bx, by + 1, c); }   // 2 px thick
         continue;
       }
       for (let i = 7; i >= 1; i--) { const f = 1 - i / 8, w = i < 3 ? 3 : 2; fillRect(Math.round(q.x - ux * i * 3.5) - 1, Math.round(q.y - uy * i * 3.5) - 1, w, w, rgb(Math.round(30 + 110 * f), Math.round(120 + 135 * f), Math.round(50 + 130 * f))); }   // a long tail fading into green
