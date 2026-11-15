@@ -966,7 +966,7 @@ const FV = (() => {
       const t = (sx + SHIP_W / 2 - q.x) / q.vx;   // when the bolt (or missile) gets to the fighter's x
       if (t < 0.05 || t > 0.7) continue;
       const y = q.y + q.vy * t;
-      if (Math.abs(y - (sy + SHIP_H / 2)) < SHIP_H / 2 + 6) return y > sy + SHIP_H / 2 ? -K_EVADE_PX : K_EVADE_PX;
+      if (Math.abs(y - (sy + SHIP_H / 2)) < SHIP_H / 2 + 6) return q.eye || y > sy + SHIP_H / 2 ? -K_EVADE_PX : K_EVADE_PX;   // from a moai's beam always up, away from the moai
     }
     return 0;
   };
