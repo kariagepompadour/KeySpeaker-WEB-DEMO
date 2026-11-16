@@ -56,13 +56,21 @@ html[data-lang="ja"] [lang="en"], html[data-lang="en"] [lang="ja"] { display: no
 .quick .btn.on, .quick .btn:active { background: var(--amber); color: #201400; } .quick .btn.on .kk, .quick .btn:active .kk { color: #201400; }
 .fnnote { margin: -8px 0 12px; font-size: 13.5px; }
 
-/* Field-guide card: beside the demo (right) on wide screens, below it otherwise. */
-.side { display: none; }
+/* Side cards. Narrow: one column in the same order as wide (poster, demo, field guide).
+   >=1200px: poster on the left of the demo. >=1680px: field guide on the right too.
+   (Columns drop from the right first, so the poster stays longest.) */
+.poster-side, .side { display: none; }
+.poster-top { margin: 0 0 14px; } .poster-top .gimg { max-width: 380px; }
 .gimg { display: block; width: 100%; max-width: 520px; margin: 0 auto; }
 .gimg img { display: block; width: 100%; height: auto; border-radius: 6px; }
 @media (min-width: 1200px) {
-  body { display: grid; grid-template-columns: minmax(0, 820px) minmax(300px, 520px); column-gap: 24px; justify-content: center; align-items: start; }
-  .side { display: block; padding: 14px 0 28px; }
-  .side .gimg { margin: 0; }
+  body { display: grid; grid-template-columns: minmax(220px, 400px) minmax(0, 820px); column-gap: 24px; justify-content: center; align-items: start; }
+  .poster-side { display: block; padding: 14px 0 14px; position: sticky; top: 0; max-height: 100svh; overflow-y: auto; scrollbar-width: none; }
+  .poster-side .gimg, .side .gimg { margin: 0; }
+  .poster-top { display: none; }
+}
+@media (min-width: 1680px) {
+  body { grid-template-columns: minmax(220px, 400px) minmax(0, 820px) minmax(220px, 400px); }
+  .side { display: block; padding: 14px 0 14px; position: sticky; top: 0; max-height: 100svh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .guide-bottom { display: none; }
 }
