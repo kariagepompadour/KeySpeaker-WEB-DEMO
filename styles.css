@@ -64,13 +64,13 @@ html[data-lang="ja"] [lang="en"], html[data-lang="en"] [lang="ja"] { display: no
 .gimg { display: block; width: 100%; max-width: 520px; margin: 0 auto; }
 .gimg img { display: block; width: 100%; height: auto; border-radius: 6px; }
 @media (min-width: 1200px) {
-  body { display: grid; grid-template-columns: minmax(220px, 340px) minmax(0, 820px); column-gap: 24px; justify-content: center; align-items: start; }
-  .poster-side { display: block; padding: 14px 0 28px; position: sticky; top: 0; }
+  body { display: grid; grid-template-columns: minmax(220px, 400px) minmax(0, 820px); column-gap: 24px; justify-content: center; align-items: start; }
+  .poster-side { display: block; padding: 14px 0 14px; position: sticky; top: 0; max-height: 100svh; overflow-y: auto; scrollbar-width: none; }
   .poster-side .gimg, .side .gimg { margin: 0; }
   .poster-top { display: none; }
 }
 @media (min-width: 1680px) {
-  body { grid-template-columns: minmax(220px, 340px) minmax(0, 820px) minmax(260px, 460px); }
-  .side { display: block; padding: 14px 0 28px; }
+  body { grid-template-columns: minmax(220px, 400px) minmax(0, 820px) minmax(220px, 400px); }
+  .side { display: block; padding: 14px 0 14px; position: sticky; top: 0; max-height: 100svh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
   .guide-bottom { display: none; }
 }
