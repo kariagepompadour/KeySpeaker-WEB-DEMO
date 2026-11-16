@@ -720,6 +720,26 @@ const FV = (() => {
   })();
   const pyrOf = (d) => PYR_N[Math.max(PYR_MIN, Math.min(PYR_MAX, Math.round(d.tier)))];   // the pyramid's sheet for its size right now
   const JG_SPR = { pyr: { w: PYR_W, rows: PYR_N[3].rows } };   // (pyr: the sheet only gives its width here; its size comes from pyrOf)   // (pyr: the sheet only gives its width here; its size comes from pyrOf)
+  // The great temple, the Aztec face of the jungle (after the Templo Mayor): a wide stepped pyramid with a stair of five dots down the middle and, on top, TWO shrines side by side
+  // with a brazier between them. All in the same grey stone as the other pyramids (no colour coding: red and blue read as a power plug). B is the brazier's bowl.
+  const GT_W = 37, GT_TIERS = 6, GT_TOP = 8, GT_SH = 5;   // dots wide; tiers; half-width of the top platform
+  const GT = (() => {
+    const mid = (GT_W - 1) / 2, rows = [], mk = () => Array(GT_W).fill(".");
+    const roof = mk(); for (let dx = -7; dx <= 7; dx++) if (dx) roof[mid + dx] = "R"; rows.push(roof);   // one stone roof over each shrine
+    for (let r = 0; r < GT_SH; r++) {
+      const row = mk();
+      for (const c of [-4, 4]) for (let dx = c - 2; dx <= c + 2; dx++) row[mid + dx] = (r >= GT_SH - 3 && dx === c) ? "D" : dx < c ? "S" : "L";   // walls with a doorway, in the same grey stone as the rest
+      if (r === GT_SH - 1) for (let dx = -1; dx <= 1; dx++) row[mid + dx] = "B";   // the brazier's bowl, between the shrines
+      rows.push(row);
+    }
+    for (let k = 0; k < GT_TIERS * 2; k++) {
+      const hw = GT_TOP + 2 * (k >> 1), row = mk();
+      for (let c = 0; c < GT_W; c++) { const dx = c - mid, a = Math.abs(dx); row[c] = a > hw ? "." : a <= 2 ? (k & 1 ? "t" : "T") : dx === hw ? "E" : dx < 0 ? (k & 1 ? "s" : "S") : (k & 1 ? "l" : "L"); }
+      rows.push(row);
+    }
+    return { w: GT_W, rows: rows.map(r => r.join("")) };
+  })();
+  JG_SPR.gt = GT;
   for (const k in JG_SPR) JG_SPR[k].h = JG_SPR[k].rows.length;
   const JG_COL = {
     pyr: { L: rgb(156, 168, 188), l: rgb(144, 156, 176), S: rgb(102, 114, 136), s: rgb(94, 106, 128), T: rgb(192, 202, 218), t: rgb(154, 166, 186), E: rgb(210, 218, 232), D: rgb(20, 24, 34), R: rgb(124, 136, 158) },
@@ -733,7 +753,7 @@ const FV = (() => {
   const jgEqColour = (own, k, du) => mix(own, JG_EQ[k], du);   // (own: the bar's colour on every other screen)
   const JG_GLOW = rgb(170, 255, 210);   // the glow of a temple on a beat
   // the zone's layout, left to right: ox from where the zone's first one enters (px). Few of each, so the screen stays readable.
-  const JG_LAYOUT = [{ ox: 0, k: "pyr", tier: 5 }, { ox: 124, k: "torch" }, { ox: 160, k: "pyr", tier: 3 }, { ox: 284, k: "torch" }, { ox: 320, k: "pyr", tier: 6 }, { ox: 444, k: "torch" }, { ox: 480, k: "pyr", tier: 2 }];   // tier: a pyramid's size, fixed in the layout like the Egyptian ones (not tied to the music)
+  const JG_LAYOUT = [{ ox: 0, k: "pyr", tier: 5 }, { ox: 124, k: "torch" }, { ox: 160, k: "pyr", tier: 3 }, { ox: 284, k: "torch" }, { ox: 320, k: "gt" }, { ox: 444, k: "torch" }, { ox: 480, k: "pyr", tier: 2 }];   // tier: a pyramid's size, fixed in the layout like the Egyptian ones (not tied to the music)
   const JG_LEN = 480 + PYR_W * DOT + 10;
   const zoneLen = (kind) => kind === 2 ? JG_LEN : kind ? IZ_LEN : DZ_LEN;
   const JUNGLE = (() => {   // the ground and the equalizer: brown earth at the foot, then deep green, green, and yellow-green at the tops
@@ -751,20 +771,53 @@ const FV = (() => {
     const c0 = Math.floor(wx / cell); let best = 0;
     for (let c = c0 - 1; c <= c0 + 1; c++) {
       const r = Math.imul(c + seed, 2654435761) >>> 0, pk = c * cell + ((r >>> 8) % cell), ph = hMin + ((r >>> 16) % (hMax - hMin)), v = ph - Math.abs(wx - pk) * slope;
-      if (v > best) best = v;
+      if (v > best) { best = v; jgRidge.peak = r; }   // (which peak it is, for its colour)
     }
     return best;
   };
-  const jgFarRange = (s) => {
+  // A volcano that smokes (after Popocatepetl, which stands near the old Aztec capital and is called "the smoking mountain"): a truncated cone of dark rock lit from the right, a crater that glows,
+  // a few streams of lava running down the slopes (they flicker), and puffs of ash that rise from the crater, drift to the right and fade. It sits between the two ranges and drifts slowly left with them.
+  const jgVolcano = (s, now) => {
+    const z = s.dz, u = z.u, cx = Math.round(100 + z.x * 0.2), TOP = 74, HALF = 52;   // as tall as the tallest of the far peaks (74 px), no taller
+    const rockS = mix(BLACK, rgb(42, 26, 28), u), rockL = mix(BLACK, rgb(70, 42, 40), u), rim = mix(BLACK, rgb(150, 66, 52), u);   // dark brown rock (it is night), a slightly lighter rim so it still stands out from the black sky
+    for (let dy = -14; dy <= 6; dy++) for (let dx = -16; dx <= 16; dx++) {   // the crater's red haze in the sky above it
+      const d = Math.hypot(dx, dy * 1.3); if (d > 15) continue;
+      const x = cx + dx, y = H - 1 - TOP + dy; if (x < 0 || x >= W || y < 0 || y >= H || fb[y * W + x] !== BLACK) continue;
+      px(x, y, mix(BLACK, rgb(96, 24, 14), u * (1 - d / 15) * 0.9));
+    }
+    const f = (Math.floor(now / 140) & 1), LAVA = [[-18, 9], [-9, 14], [5, 11], [13, 16], [22, 8]];   // lava streams: [column, length]
+    for (let dx = -HALF; dx <= HALF; dx++) {
+      const x = cx + dx; if (x < 0 || x >= W) continue;
+      const a = Math.abs(dx), jag = (Math.imul(dx, 2654435761) >>> 29) & 1;
+      const top = a <= 6 ? TOP : Math.round(TOP - (a - 6) * (TOP / (HALF - 6))) + jag;
+      if (top <= 0) continue;
+      let lava = 0; for (const [ld, ll] of LAVA) if (Math.abs(dx - ld) <= 1 && a > 6) lava = ll + 3 * Math.sin(now / 500 + ld);
+      for (let k = 0; k < top; k++) {
+        let c = k >= top - 1 ? rim : dx < 0 ? rockS : rockL;
+        if (a <= 6 && k >= top - 3) c = mix(BLACK, f ? rgb(255, 120, 40) : rgb(220, 72, 26), u);   // the crater's glow
+        else if (lava && k >= top - 1 - lava) c = mix(BLACK, (k + f) % 4 < 2 ? rgb(176, 36, 20) : rgb(226, 66, 28), u);
+        fb[(H - 1 - k) * W + x] = c;
+      }
+    }
+    for (let i = 0; i < 6; i++) {   // the ash: warm red-grey just above the crater, then grey
+      const ph = ((now / 2600) + i / 6) % 1;
+      if (ph > 0.8) continue;   // before it fades to the sky's black (a dark blob on black looks like a hole)
+      const al = Math.min(1, (1 - ph) * 1.1) * u, px0 = cx + ph * 16 + 2 * Math.sin(now / 500 + i), py0 = H - 1 - TOP - 4 - ph * 40, r = 1.5 + ph * 3, c = mix(BLACK, ph < 0.25 ? rgb(200, 90, 56) : rgb(150, 136, 138), al);
+      for (let y = Math.floor(py0 - r); y <= Math.ceil(py0 + r); y++) for (let x = Math.floor(px0 - r); x <= Math.ceil(px0 + r); x++) if ((x - px0) * (x - px0) + (y - py0) * (y - py0) <= r * r) px(x, y, c);
+    }
+  };
+  const jgFarRange = (s, now) => {
     const z = s.dz, u = z.u;
-    const layers = [{ sc: z.x * 0.2, cell: 44, lo: 40, hi: 74, sl: 1.15, seed: 7, body: rgb(10, 62, 42), rim: rgb(60, 142, 98), rag: false },
-                    { sc: z.x * 0.45, cell: 30, lo: 26, hi: 52, sl: 1.45, seed: 31, body: rgb(5, 38, 30), rim: rgb(84, 190, 120), rag: true }];
+    const layers = [{ sc: z.x * 0.2, cell: 44, lo: 40, hi: 74, sl: 1.15, seed: 7, body: rgb(10, 62, 42), rim: rgb(60, 142, 98), earthBody: rgb(84, 60, 38), earthRim: rgb(166, 124, 82), rag: false },
+                    { sc: z.x * 0.45, cell: 30, lo: 26, hi: 52, sl: 1.45, seed: 31, body: rgb(5, 38, 30), rim: rgb(84, 190, 120), earthBody: rgb(52, 36, 26), earthRim: rgb(128, 94, 62), rag: true }];
     for (const L of layers) {
-      const body = mix(BLACK, L.body, u), rim = mix(BLACK, L.rim, u);
+      if (L.rag) jgVolcano(s, now);   // the volcano stands between the far range and the near one
+      const body = mix(BLACK, L.body, u), rim = mix(BLACK, L.rim, u), eBody = mix(BLACK, L.earthBody, u), eRim = mix(BLACK, L.earthRim, u);
       for (let x = 0; x < W; x++) {
         let top = Math.round(jgRidge(x - L.sc, L.cell, L.lo, L.hi, L.sl, L.seed));
+        const earth = ((jgRidge.peak >>> 27) % 3) === 0;   // about one peak in three is bare earth, not forest: the jungle meets drier ground near the volcano
         if (L.rag) top += (Math.imul(x, 2654435761) >>> 30) & 1;   // a ragged canopy edge, one or two px
-        for (let k = 0; k < top; k++) fb[(H - 1 - k) * W + x] = k >= top - 1 ? rim : body;
+        for (let k = 0; k < top; k++) fb[(H - 1 - k) * W + x] = k >= top - 1 ? (earth ? eRim : rim) : (earth ? eBody : body);
       }
     }
   };
@@ -777,6 +830,16 @@ const FV = (() => {
       if (d.k === "pyr") {
         if (cx > W || cx < -PYR_W * DOT) continue;
         jgDraw(pyrOf(d), pcols, cx, gy);
+      }
+      else if (d.k === "gt") {   // the great temple: two shrines (blue and red roofs) and a brazier between them whose flame leaps on a beat
+        if (cx > W || cx < -GT_W * DOT) continue;
+        const gcols = { ...pcols, B: rgb(70, 60, 56) };
+        jgDraw(GT, gcols, cx, gy);
+        const bx = cx + (GT_W - 1) / 2 * DOT, f = Math.floor(now / 110 + cx) & 1, top = (r) => gy - (GT.h - r) * DOT;
+        dot(bx, top(GT_SH - 1), f ? rgb(255, 150, 40) : rgb(255, 226, 110));
+        dot(bx, top(GT_SH - 2), f ? rgb(255, 226, 110) : rgb(255, 150, 40));
+        if (g > 0.15) dot(bx, top(GT_SH - 3), rgb(255, 250, 190));
+        addDot(bx, top(GT_SH - 3), Math.round(70 + 90 * g), Math.round(36 + 50 * g), 0);
       }
       else if (d.k === "torch") {   // a post with a flame that flickers, and a small warm light on the ground
         if (cx > W || cx < -DOT) continue;
@@ -920,7 +983,7 @@ const FV = (() => {
       }
       px(cx + dx, cy + dy, tone[t]);
     }
-    if (s.dz.kind === 2) jgFarRange(s);   // the jungle: the far mountain ranges under the moon
+    if (s.dz.kind === 2) jgFarRange(s, now);   // the jungle: the far mountain ranges under the moon
   }
   function renderMoai(s, now) {   // the two ahu, then the moai on them; the eyes glow on a beat, fully while the mouth is open to shoot
     const z = s.dz, top = moaiTop(), gy = H - GROUND, stone = rgb(70, 64, 60), stone2 = rgb(96, 88, 82);
@@ -1211,7 +1274,10 @@ const FV = (() => {
     ["......b...", ".....www..", ".....www..", ".....ww...", "....www...", "...wwwww..", "...wwwwbww", ".....www..", "....wwww..", "...www....", "....ww...."],
     ["......b...", ".....www..", ".....www..", ".....ww...", "...wwwwbb.", "..wwowwww.", ".....ww...", "....wwww..", "...ww..ww.", "..ww...ww.", "..ww......"]];
   const WAVE_SEQ = [0, 1, 2, 1], PERSON_W = 10, PERSON_H = 11;
-  const FIG = { w: rgb(255, 255, 255), o: rgb(255, 140, 32), b: rgb(40, 168, 255) };
+  const FIG = { w: rgb(255, 255, 255), o: rgb(255, 140, 32), b: rgb(40, 168, 255), R: rgb(230, 40, 40), Y: rgb(255, 214, 60) };
+  // In the jungle the people look dressed, not painted: a red headgear on the top of the head, a yellow tunic on the body; the face, hands and legs stay white (a drawn-over copy of each frame, made once)
+  const JGP = new WeakMap();
+  const jgFig = (rows, run) => { let v = JGP.get(rows); if (!v) { v = rows.map((row, r) => [...row].map((ch, c) => ch === "." ? "." : (r <= 1 && c >= (run ? 5 : 3) && c <= (run ? 7 : 6)) ? "R" : (ch === "w" && (run ? r >= 3 && r <= 7 && c >= 4 && c <= 6 : r >= 4 && r <= 8 && c >= 4 && c <= 5)) ? "Y" : ch).join("")); JGP.set(rows, v); } return v; };
   function drawFigure(rows, x, y, mirror) {   // the figure with a black outline, as in SOUND TERRARIUM (any number of rows)
     const hh = rows.length, at = (yy, xx) => (yy < 0 || yy >= hh || xx < 0 || xx >= PERSON_W) ? "." : rows[yy][mirror ? PERSON_W - 1 - xx : xx];
     for (let yy = -1; yy <= hh; yy++) for (let xx = -1; xx <= PERSON_W; xx++) {
@@ -1294,7 +1360,7 @@ const FV = (() => {
     } else if (s.dz.ph === 2 && s.dz.kind >= 1) {   // on the moai island the islanders come out from behind a moai the same way and run after the fighter; in the jungle, from a stone head or a pyramid
       s.citAcc -= dt;
       if (s.citAcc <= 0) {
-        const z = s.dz, half = (d) => d.moai ? MOAI_W * DOT / 2 : JG_SPR[d.k] ? JG_SPR[d.k].w * DOT / 2 : 0, src = (d) => z.kind === 2 ? d.k === "pyr" : d.moai;
+        const z = s.dz, half = (d) => d.moai ? MOAI_W * DOT / 2 : JG_SPR[d.k] ? JG_SPR[d.k].w * DOT / 2 : 0, src = (d) => z.kind === 2 ? (d.k === "pyr" || d.k === "gt") : d.moai;
         const ok = z.items.filter(d => { const x = dzCx(z, d) + half(d); return src(d) && x > 110 && x < W - 20; });
         if (ok.length && s.cit.length < 3) {   // three or four at a time, like the city's
           const d = ok[nextRandom(s) % ok.length], n = 3 + nextRandom(s) % 2, x0 = dzCx(z, d) + half(d) - PERSON_W / 2;
@@ -1362,7 +1428,8 @@ const FV = (() => {
     for (const c of s.cit) {   // the people who came out of the buildings
       if (c.mode === "wait") continue;
       const gy = H - GROUND - PERSON_H, run = c.mode === "run" || c.mode === "back";
-      drawFigure(run ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]], Math.round(c.x), gy, c.mode === "run");   // running left: mirrored; running back to the right: as it is
+      const fig = run ? RUNNER[Math.floor(now / 110) % 3] : WAVER[WAVE_SEQ[(Math.floor(now / 230) + c.ph) % 4]];
+      drawFigure(s.dz.kind === 2 && s.dz.ph ? jgFig(fig, run) : fig, Math.round(c.x), gy, c.mode === "run");   // running left: mirrored; running back to the right: as it is
     }
     for (const k of s.sparks) {   // a small light where somebody was saved: a plus that opens, then fades
       const u = k.t / 0.5, r = 1 + Math.round(u * 2), a = 1 - u, c = rgb(Math.round(255 * a + 40), Math.round(255 * a + 40), Math.round(180 * a + 20));
