@@ -2259,6 +2259,7 @@ function stopSource() {
 async function startCapture() {
   if (!canCapture) { say("このブラウザは音の取り込みに対応していません。", "This browser cannot capture audio."); return; }
   const gen = claim();
+  A.pend = "capture";   // the sharing dialog is open: a second press of START does nothing (toggleShare)
   const ac = ensureAudio();
   try {
     // Browsers insist on asking for video as well; it is thrown away below.
@@ -2282,6 +2283,8 @@ async function startCapture() {
   } catch (e) {
     if (gen !== A.gen) return;
     e.name === "NotAllowedError" ? say("共有がキャンセルされました。", "Sharing was cancelled.") : say("取り込めませんでした: " + e.message, "Could not capture: " + e.message);
+  } finally {
+    if (gen === A.gen && A.pend === "capture") A.pend = null;   // done, cancelled or failed (another source's claim() has cleared it already)
   }
 }
 /* ---- microphone: the phone's main source, and a choice on a computer. Permission is asked only when the button is pressed.
@@ -2381,7 +2384,7 @@ function startTest() {
 }
 const toggleTest = () => (A.src === "test" ? (claim(), stopSource(), say("テスト音を止めました。", "Test sound stopped.")) : startTest());
 const isSounding = () => !!A.ac && A.src !== "none" && A.ac.state === "running";
-const toggleShare = () => (A.src === "capture" ? (claim(), stopSource(), say("取り込みを止めました。", "Capture stopped.")) : startCapture());
+const toggleShare = () => (A.src === "capture" ? (claim(), stopSource(), say("取り込みを止めました。", "Capture stopped.")) : A.pend === "capture" ? null : startCapture());
 const toggleFull = () => { document.fullscreenElement ? document.exitFullscreen() : lcd.requestFullscreen && lcd.requestFullscreen(); };
 
 /* ================= keys: exactly the device's own (Fn = Shift on a computer) ================= */
@@ -2480,10 +2483,6 @@ function frame(t) {
   } else { rmsN++; smp.fill(0); }
   if (peak > 0.003) ui.lastSoundMs = now;
   meter.inPk = Math.max(meter.inPk, peak);
-  if (now - (ui.dbgAt || 0) > 250) {                                  // trial: a diagnostics line under the buttons
-    ui.dbgAt = now; const tr = A.stream && A.stream.getAudioTracks()[0], el = $("dbg");
-    if (el) el.textContent = "src=" + A.src + "  ctx=" + (A.ac ? A.ac.state : "none") + "  track=" + (tr ? tr.readyState + (tr.muted ? "/muted" : "") : "-") + "  level=" + (peak > 0 ? (20 * Math.log10(peak)).toFixed(0) + " dB" : "silent");
-  }
   shake.peak = Math.max(shake.peak, peak * 32768);
 
   if (ui.splashOn && !ui.splashIdle && now - ui.splashStartMs >= SPLASH_MS) ui.splashOn = false;
