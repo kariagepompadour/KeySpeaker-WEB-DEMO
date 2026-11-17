@@ -2206,7 +2206,7 @@ function drawSplash() {
 }
 
 /* ================= audio: the sound this computer is playing (screen / tab sharing) ================= */
-const A = { ac: null, analyser: null, sink: null, src: "none", node: null, stream: null, sr: 48000, gen: 0, pend: null };
+const A = { ac: null, analyser: null, sink: null, src: "none", node: null, stream: null, sr: 48000, gen: 0, pend: null, lastSig: 0, still: 0, stall: false };
 const td = new Float32Array(2048), smp = new Float32Array(512);
 const $ = id => document.getElementById(id);
 // Page language: English (main) or Japanese (sub). The screen itself is always English, like the device.
@@ -2228,6 +2228,10 @@ const canMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
 const claim = () => { A.pend = null; A.gen++; syncUi(); return A.gen; };
 
 function ensureAudio() {
+  if (A.stall && A.ac) {   // the analyser went stale (see audioStalled): a new context, made inside the tap that starts a source
+    const old = A.ac; A.ac = null; A.analyser = null; A.sink = null; A.stall = false;
+    try { old.close().catch(() => {}); } catch (e) {}
+  }
   if (!A.ac) {
     const ac = A.ac = new (window.AudioContext || window.webkitAudioContext)();
     A.analyser = ac.createAnalyser(); A.analyser.fftSize = 2048; A.analyser.smoothingTimeConstant = 0;
@@ -2351,6 +2355,22 @@ function micCheck() {                          // called on mute / unmute / Audi
   if (!micPaused) { micPaused = true; say("マイクの入力が一時停止しています…", "The microphone input is paused…"); }
   // Not while the page is hidden (a locked phone): the check runs again when it comes back (visibilitychange).
   micWatch = setTimeout(() => { micWatch = 0; if (A.src !== "mic" || document.hidden) return; bad() ? micLost() : micCheck(); }, 3000);
+}
+// Some phones (an iPhone after the screen was locked) leave the AudioContext "running" while the analyser keeps giving the same
+// block again and again: the terrain and the equalizer stand still at one level, not at the ground as in silence. frame() counts
+// frames with exactly the same block (live sound never repeats to the last bit); after 1.5 s the source is declared stalled. The test
+// song is restarted by the next tap on the page (a new AudioContext needs a tap on iOS); a shared tab is let go, and START asks again.
+function audioStalled() {
+  A.stall = true;
+  if (A.src === "capture") { stopSource(); say("音の取り込みが止まりました。もう一度 START を押してください。", "The audio capture stopped. Press START again."); return; }
+  say("音の処理が止まりました。画面をタップすると再開します。", "The audio processing stopped. Tap the screen to restart it.");
+  const redo = e => {
+    document.removeEventListener("click", redo, true);
+    if (!A.stall || A.src !== "test") return;
+    if (e && e.target && e.target.closest && e.target.closest("button")) return;   // a button does its own job (and the next start makes the new context)
+    startTest();
+  };
+  document.addEventListener("click", redo, true);
 }
 // A suspended or interrupted AudioContext (a lock screen, a call, another app) is resumed whatever the source is; the screen would stand
 // still otherwise. The microphone has its own watch (micCheck) on top. A browser that wants a tap first refuses; pressing the source's button again does it.
@@ -2486,6 +2506,9 @@ function frame(t) {
   if (isSounding()) {
     A.analyser.getFloatTimeDomainData(td);
     let sq = 0; for (let i = 0; i < td.length; i++) { sq += td[i] * td[i]; const a = Math.abs(td[i]); if (a > peak) peak = a; }
+    let sig = 0; for (let i = 0; i < td.length; i += 61) sig += td[i] * (i + 1);
+    if (peak > 0 && sig === A.lastSig) { if (++A.still === 45 && (A.src === "test" || A.src === "capture")) audioStalled(); } else A.still = 0;
+    A.lastSig = sig;
     rmsAcc += sq / td.length; rmsN++; ui.playMs += 33;
     for (let i = 0; i < 512; i++) smp[i] = td[td.length - 512 + i] * 32767;
   } else { rmsN++; smp.fill(0); }
