@@ -2233,7 +2233,7 @@ function ensureAudio() {
     A.analyser = ac.createAnalyser(); A.analyser.fftSize = 2048; A.analyser.smoothingTimeConstant = 0;
     A.sink = ac.createGain(); A.sink.gain.value = 0; A.analyser.connect(A.sink); A.sink.connect(ac.destination);
     A.sr = ac.sampleRate;
-    ac.addEventListener("statechange", micCheck);   // does nothing unless the microphone is the source
+    ac.addEventListener("statechange", audioCheck);
     FV.init(flight, performance.now() | 0, A.sr);
   }
   if (A.ac.state !== "running") A.ac.resume().catch(() => {});   // Safari also has "interrupted" (after a call, say), not only "suspended"
@@ -2275,8 +2275,9 @@ async function startCapture() {
     st.getVideoTracks().forEach(t => t.stop());
     if (!st.getAudioTracks().length) { st.getTracks().forEach(t => t.stop()); say("音声が共有されませんでした。共有ダイアログで「音声を共有」にチェックしてください。", "No audio was shared. Tick \"Share audio\" in the sharing dialog."); return; }
     stopSource();
-    A.stream = new MediaStream(st.getAudioTracks());
-    A.stream.getAudioTracks()[0].addEventListener("ended", () => { stopSource(); say("共有が終わりました。もう一度 START を押してください。", "Sharing ended. Press START again."); });
+    const mine = A.stream = new MediaStream(st.getAudioTracks());
+    // Only while this is still the source: a late 'ended' of an old share must not stop what was chosen since (as the microphone's does)
+    mine.getAudioTracks()[0].addEventListener("ended", () => { if (A.stream !== mine) return; stopSource(); say("共有が終わりました。もう一度 START を押してください。", "Sharing ended. Press START again."); });
     try { A.el = new Audio(); A.el.muted = true; A.el.srcObject = A.stream; A.el.play().catch(() => {}); } catch (e) {}
     A.node = ac.createMediaStreamSource(A.stream); A.node.connect(A.analyser);   // not to the speakers: it is already playing
     A.src = "capture"; syncUi(); say("PCの音を取り込み中。音を鳴らすと地形ができます。", "Capturing the PC's sound. Play something and the terrain grows.");
@@ -2350,6 +2351,12 @@ function micCheck() {                          // called on mute / unmute / Audi
   if (!micPaused) { micPaused = true; say("マイクの入力が一時停止しています…", "The microphone input is paused…"); }
   // Not while the page is hidden (a locked phone): the check runs again when it comes back (visibilitychange).
   micWatch = setTimeout(() => { micWatch = 0; if (A.src !== "mic" || document.hidden) return; bad() ? micLost() : micCheck(); }, 3000);
+}
+// A suspended or interrupted AudioContext (a lock screen, a call, another app) is resumed whatever the source is; the screen would stand
+// still otherwise. The microphone has its own watch (micCheck) on top. A browser that wants a tap first refuses; pressing the source's button again does it.
+function audioCheck() {
+  if (A.ac && A.src !== "none" && A.src !== "mic" && A.ac.state !== "running") A.ac.resume().catch(() => {});
+  micCheck();
 }
 const toggleMic = () => (A.src === "mic" ? (claim(), stopSource(), say("マイクを止めました。", "Microphone stopped.")) : A.pend === "mic" ? null : startMic());
 /* ---- trial: a synthetic song (kick, snare, hats, bass, arpeggio; loud and quiet bars), so the terrain, the equalizer and Kong
@@ -2435,6 +2442,7 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => {
   document.querySelectorAll("button.on[data-code]").forEach(b => { if (b.dataset.code === e.code) b.classList.remove("on"); });
 });
+addEventListener("blur", () => document.querySelectorAll("button.on[data-code]").forEach(b => b.classList.remove("on")));
 for (const box of document.querySelectorAll(".keys, .quick")) box.addEventListener("click", e => {
   const b = e.target.closest("button[data-code]"); if (!b) return;
   onKey(b.dataset.code, !!b.dataset.fn); b.blur();
@@ -2453,7 +2461,7 @@ if (!canCapture) { $("bShare").disabled = true; $("bShare").hidden = true; }
 if (!canMic) $("bMic").disabled = true;
 // A phone may suspend the AudioContext or mute the microphone while the page is hidden or interrupted (lock screen, a call).
 // When the page is back, check; if the microphone did not come back by itself, ask for MIC START (see micCheck).
-document.addEventListener("visibilitychange", () => { if (!document.hidden) micCheck(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) audioCheck(); });
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 if (canCapture) say("START(PCの音)または MIC START(マイク)を押すと、音の取り込みを始めます。", "Press START (the PC's sound) or MIC START (the microphone) to begin.");
